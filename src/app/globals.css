@@ -1,0 +1,557 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --background: #101010;
+  --foreground: #f5f5f5;
+  --card: #181818;
+  --border: #363636;
+  --input-border: #656565;
+  --primary: #ededed;
+  --primary-foreground: #171717;
+  --muted: #242424;
+  --muted-foreground: #b4b4b4;
+  --destructive: #ffaaa2;
+  --ring: #d4d4d4;
+}
+
+:root[data-theme="scifi"] {
+  --background: #1a142c;
+  --foreground: #faf6ff;
+  --card: #271d3b;
+  --border: #624c82;
+  --input-border: #6386a4;
+  --primary: #c39aff;
+  --primary-foreground: #201230;
+  --muted: #30224d;
+  --muted-foreground: #d4c8e8;
+  --ring: #83efff;
+  --selection: #8bffb8;
+  --price: #f2ff82;
+  --signal: #83efff;
+  --highlight: #ff9cda;
+}
+
+.theme-icon-scifi {
+  display: none;
+}
+
+:root[data-theme="scifi"] .theme-icon-dark {
+  display: none;
+}
+
+:root[data-theme="scifi"] .theme-icon-scifi {
+  display: block;
+}
+
+@theme inline {
+  --font-sans: "Kantumruy Pro", Tahoma, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
+}
+
+body {
+  @apply bg-background font-sans text-foreground antialiased;
+  min-height: 100vh;
+}
+
+:root[data-theme="scifi"] body {
+  background-image:
+    radial-gradient(ellipse at 1% 84%, #733aa033, transparent 53%),
+    radial-gradient(ellipse at 98% 90%, #28556655, transparent 49%);
+}
+
+a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 4px;
+}
+
+.page-width {
+  width: min(100% - 2rem, 82rem);
+  margin-inline: auto;
+}
+
+.site-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+}
+
+:root[data-theme="scifi"] .site-header {
+  position: relative;
+  background: linear-gradient(110deg, #3b2456, #281d44 42%, #183945);
+}
+
+:root[data-theme="scifi"] .site-header::after {
+  position: absolute;
+  inset: auto 0 -1px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary), var(--highlight), var(--signal), var(--selection), var(--price));
+  pointer-events: none;
+  content: "";
+}
+
+:root[data-theme="scifi"] .site-brand svg,
+:root[data-theme="scifi"] .theme-icon-scifi {
+  color: var(--primary);
+}
+
+.site-nav {
+  display: flex;
+  min-height: 4rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.site-brand {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: 0.145em;
+}
+
+.site-brand svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+}
+
+.header-discover {
+  min-height: 2.75rem;
+  align-items: center;
+  border-inline-start: 1px solid var(--border);
+  padding-inline-start: 1.75rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+  transition: color 160ms ease;
+}
+
+.header-discover:hover {
+  color: var(--foreground);
+}
+
+.testnet-label {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.testnet-label::first-letter {
+  text-transform: uppercase;
+}
+
+.spotlight-tabs {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  overflow: hidden;
+  background: #101010;
+  color: #f7f7f7;
+}
+
+.spotlight-tabs::after,
+.spotlight-visual {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.spotlight-tabs::after {
+  z-index: 0;
+  content: "";
+  background: linear-gradient(90deg, #060606ed 0%, #080808b8 32%, #08080826 72%, transparent),
+    linear-gradient(0deg, #0808088c, transparent 34%);
+}
+
+:root[data-theme="scifi"] .spotlight-tabs::after {
+  background:
+    linear-gradient(90deg, #231332f2 0%, #2f1a4dba 33%, transparent 80%),
+    linear-gradient(0deg, #1b11279c, transparent 58%),
+    linear-gradient(113deg, #7f39bd3b 8%, #e773c34a 44%, #60d7ff54 74%, #6dffc34d);
+}
+
+.spotlight-art {
+  object-fit: cover;
+  object-position: center 30%;
+}
+
+.spotlight-stage {
+  grid-row: 1;
+}
+
+.spotlight-slide {
+  position: relative;
+  z-index: 1;
+}
+
+.spotlight-inner {
+  display: flex;
+  min-height: clamp(19rem, 31vw, 29rem);
+  align-items: center;
+  padding-block: clamp(2.25rem, 5vw, 4.5rem);
+}
+
+.spotlight-copy {
+  display: grid;
+  max-width: 36rem;
+  justify-items: start;
+  gap: 0.7rem;
+}
+
+.spotlight-kicker {
+  color: #e2e2e2;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.spotlight-copy h2 {
+  font-size: clamp(2.5rem, 6.4vw, 5.6rem);
+  font-weight: 600;
+  line-height: 0.99;
+  letter-spacing: -0.06em;
+  text-wrap: balance;
+}
+
+.spotlight-description {
+  color: #e2e2e2;
+  font-size: clamp(0.9rem, 2vw, 1.12rem);
+}
+
+.spotlight-copy a {
+  margin-top: 0.4rem;
+}
+
+:root[data-theme="scifi"] .spotlight-kicker {
+  color: #f3c7fd;
+}
+
+:root[data-theme="scifi"] .spotlight-copy a {
+  background-image: linear-gradient(110deg, var(--primary), #eba1ff 57%, var(--highlight));
+  box-shadow: 0 0 22px #c39aff55;
+}
+
+:root[data-theme="scifi"] .spotlight-copy a:hover {
+  background-image: linear-gradient(110deg, #d2b0ff, #f1b6ff 57%, #ffb4e4);
+}
+
+.spotlight-copy [data-icon] {
+  transition: transform 180ms ease;
+}
+
+.spotlight-games {
+  position: relative;
+  z-index: 1;
+  grid-row: 2;
+  border-top: 1px solid #ffffff26;
+  background: #0c0c0ce6;
+}
+
+:root[data-theme="scifi"] .spotlight-games {
+  border-color: #d0bdff40;
+  background: #251837eb;
+}
+
+@supports (backdrop-filter: blur(12px)) {
+  .spotlight-games {
+    background: #0c0c0c9c;
+    backdrop-filter: blur(12px);
+  }
+
+  :root[data-theme="scifi"] .spotlight-games {
+    background: #251837bd;
+  }
+}
+
+.spotlight-game-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.2rem clamp(0.35rem, 1.7vw, 1.5rem);
+  padding-block: 0.5rem;
+}
+
+.spotlight-game {
+  display: grid;
+  min-width: 0;
+  min-height: 2.75rem;
+  place-items: center;
+  padding: 0.35rem 0.2rem;
+  border-bottom: 2px solid transparent;
+  color: #d5d5d5;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.18;
+  text-align: center;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.spotlight-game[data-state="active"],
+.spotlight-game:hover {
+  color: #fff;
+}
+
+.spotlight-game[data-state="active"] {
+  border-bottom-color: currentColor;
+}
+
+:root[data-theme="scifi"] .spotlight-game[data-state="active"] {
+  border-image: linear-gradient(90deg, var(--signal), var(--selection), var(--price)) 1;
+  background-image: linear-gradient(0deg, #85eecb25, transparent 86%);
+}
+
+.spotlight-game:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.spotlight-slide:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -3px;
+}
+
+.item-store {
+  padding-bottom: clamp(2.5rem, 6vw, 5rem);
+}
+
+.store-banner {
+  border-top: 1px solid var(--border);
+}
+
+.store-banner-inner {
+  display: grid;
+  align-items: center;
+  gap: 0.85rem 2rem;
+  padding-block: clamp(1rem, 2.7vw, 1.8rem) 0.65rem;
+}
+
+.store-banner h2 {
+  font-size: clamp(1.65rem, 3vw, 2.25rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.045em;
+}
+
+.store-banner-title p {
+  margin-top: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.catalog-search {
+  display: flex;
+  min-width: 0;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.625rem;
+  padding-inline: 0.75rem 0.15rem;
+  border: 1px solid var(--input-border);
+  border-radius: 0.25rem;
+  background: var(--card);
+  color: var(--muted-foreground);
+}
+
+.catalog-search:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.catalog-search > svg {
+  flex: none;
+  width: 1.1rem;
+}
+
+:root[data-theme="scifi"] .catalog-search > svg {
+  color: var(--signal);
+}
+
+.catalog-search > input {
+  min-width: 0;
+  min-height: 2.875rem;
+  flex: 1;
+  outline: none;
+  color: var(--foreground);
+  appearance: none;
+}
+
+.catalog-search > input::placeholder {
+  color: var(--muted-foreground);
+  opacity: 1;
+}
+
+.catalog-search > input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.item-type-options {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: clamp(0.45rem, 2.2vw, 2rem);
+  border-bottom: 1px solid var(--border);
+}
+
+.store-results-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.65rem;
+  margin-block: 1rem 0.65rem;
+}
+
+.store-results-heading h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.result-count {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(0.6rem, 2vw, 1.3rem);
+}
+
+.store-item {
+  min-width: 0;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.store-item-art {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 1.36;
+  background: #242424;
+}
+
+.store-item-art img {
+  object-fit: cover;
+  transition: transform 220ms ease-out;
+}
+
+.store-item-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.3rem 0.8rem;
+  padding-top: 0.65rem;
+  font-size: 0.8125rem;
+}
+
+.store-item-details h4 {
+  font-size: clamp(0.9rem, 2vw, 1.125rem);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.store-item-details h4 + p,
+.item-price span {
+  color: var(--muted-foreground);
+}
+
+.item-price {
+  flex: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+:root[data-theme="scifi"] .item-type-options button[data-state="on"] {
+  color: var(--selection);
+}
+
+:root[data-theme="scifi"] .store-item {
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  background:
+    linear-gradient(110deg, #2d2148, #201d3b) padding-box,
+    linear-gradient(110deg, #8b63cc, #70569a 48%, #578ea1) border-box;
+}
+
+:root[data-theme="scifi"] .store-item-details {
+  padding-inline: 0.65rem;
+}
+
+:root[data-theme="scifi"] .item-price,
+:root[data-theme="scifi"] .item-price span {
+  color: var(--price);
+}
+
+.empty-catalog {
+  display: grid;
+  min-height: 9rem;
+  justify-items: start;
+  align-content: center;
+  gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .page-width {
+    width: min(100% - clamp(3rem, 9vw, 10rem), 82rem);
+  }
+
+  .store-banner-inner {
+    grid-template-columns: 1fr minmax(0, 23rem);
+  }
+
+  .item-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 900px) {
+  .spotlight-game-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .spotlight-game {
+    font-size: 0.9375rem;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .spotlight-slide[data-state="active"] .spotlight-copy {
+    animation: spotlight-copy-reveal 200ms ease-out both;
+  }
+
+  .spotlight-copy a:hover [data-icon] {
+    transform: translateX(0.2rem);
+  }
+
+  .store-item:hover img {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes spotlight-copy-reveal {
+  from { opacity: 0.55; transform: translateY(0.2rem); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,16 @@
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.env*
+!.env.example
+.vercel/
+.npm-cache/
+.tools/
+.runtime/
+playwright-report/
+test-results/
+contracts/artifacts/
+contracts/cache/
+supabase/.temp/
+supabase/.branches/

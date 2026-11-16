@@ -1,0 +1,62 @@
+{
+  "name": "game-item-marketplace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "contracts",
+    "packages/shared"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "next dev --webpack --hostname 127.0.0.1",
+    "build": "next build --webpack",
+    "start": "next start --hostname 127.0.0.1",
+    "typecheck": "next typegen && tsc --noEmit && tsc -p contracts/tsconfig.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "contracts:build": "npm run build -w @marketplace/contracts",
+    "contracts:test": "npm test -w @marketplace/contracts",
+    "contracts:node": "npm run node -w @marketplace/contracts",
+    "contracts:deploy:local": "npm run deploy:local -w @marketplace/contracts",
+    "contracts:deploy:sepolia": "npm run deploy:sepolia -w @marketplace/contracts"
+  },
+  "dependencies": {
+    "@fontsource/kantumruy-pro": "5.3.0",
+    "@hookform/resolvers": "5.9.2",
+    "@marketplace/shared": "0.1.0",
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.119.0",
+    "@tailwindcss/postcss": "4.3.5",
+    "@wagmi/core": "2.22.1",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "next": "16.4.6",
+    "radix-ui": "1.8.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-hook-form": "7.92.0",
+    "server-only": "0.0.1",
+    "tailwind-merge": "3.7.0",
+    "tailwindcss": "4.3.5",
+    "viem": "2.57.20",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.16",
+    "@nomicfoundation/hardhat-node-test-runner": "3.1.2",
+    "@openzeppelin/contracts": "5.6.1",
+    "@playwright/test": "1.65.1",
+    "@types/node": "22.20.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "hardhat": "3.22.0",
+    "node": "22.23.5",
+    "solc": "0.8.38",
+    "supabase": "2.122.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  }
+}

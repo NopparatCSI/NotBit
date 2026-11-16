@@ -1,0 +1,16 @@
+{
+  "name": "@marketplace/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@marketplace/shared": "0.1.0"
+  },
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node --hostname 127.0.0.1",
+    "deploy:local": "hardhat run scripts/deploy-local.ts",
+    "deploy:sepolia": "hardhat run scripts/deploy-sepolia.ts"
+  }
+}
