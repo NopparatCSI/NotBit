@@ -20,6 +20,10 @@
 
 Migration เปิดการอ่านผ่าน RLS แล้ว สำหรับการเขียนผ่าน client ให้เพิ่ม grants ระดับคอลัมน์และ RLS ของแต่ละฟีเจอร์ใน migration ถัดไป สำหรับเส้นทาง API ที่ใช้สิทธิ์เซิร์ฟเวอร์ ให้ตรวจ session และ ownership ก่อนเขียนทุกครั้ง
 
+ข้อเสนอใช้ `GET /api/v1/conversations/:id/offers` เพื่ออ่านคู่ค้า เครือข่าย Contract และข้อเสนอ 20 รายการล่าสุด ส่วน `POST` รับ `{ id, agreement, signedOffer }` โดยเซิร์ฟเวอร์ตรวจผู้ขาย คู่ค้า UUID/hash ลายเซ็น และอายุข้อเสนอ ก่อนเขียนด้วย `SUPABASE_SECRET_KEY`. ตาราง `offers` ยังคงปฏิเสธการเขียนจาก browser โดยตรง
+
+`POST /api/v1/orders/:id` รับ `{ hash }` ของธุรกรรมฝาก ตรวจผู้ซื้อ Contract calldata และยอดเงินก่อนเพิ่ม `funding_attempts`. `GET` คืน `chainOrderId`, `amountWei`, สถานะธุรกรรม จำนวน confirmations และสถานะออเดอร์ที่อ่านจากเชนย้อนหลัง 2 บล็อก เพื่อรอครบอย่างน้อย 3 confirmations. ตาราง `orders`, สถานะ `offers` และ `listings` ยังต้องให้ indexer ของ Developer 3 ประมวลผลจากเหตุการณ์บนเชนตามข้อตกลงเดิม
+
 ## Developer 3
 
 | เส้นทางที่เสนอ | ข้อมูลที่ใช้ |
@@ -30,6 +34,10 @@ Migration เปิดการอ่านผ่าน RLS แล้ว สำ�
 | `POST /api/v1/admin/orders/:id/decision` | ใช้ `decisionSchema` และ `hashDecision` เพื่อเตรียมข้อมูลก่อนให้ผู้ดูแลส่งธุรกรรม |
 
 `listing-images` เป็น bucket สาธารณะ ส่วน `order-evidence` เป็น bucket ส่วนตัว API เขียนหลักฐานโดยใช้ path ใหม่ทุกครั้งและเก็บ hash ของไฟล์ ผู้ดูแลเข้าคิวออเดอร์ได้ ฝั่ง API ตรวจบริบทออเดอร์ก่อนดึงแชทหรือออกลิงก์หลักฐาน
+
+หน้า Evidence ของ Developer 2 ส่ง `multipart/form-data` ไปที่ `POST /api/v1/orders/:id/evidence` ด้วย `stage` เป็น `DELIVERY` หรือ `RECEIPT` และฟิลด์ `files` ซ้ำตามลำดับไฟล์ API ตอบ `{ data: EvidenceReceipt }` ตาม shared schema. Client ตรวจ UUID บนเชน ผู้ส่ง ขั้นตอน และ `hashEvidence` ของไบต์ไฟล์ที่เลือก ก่อนจำลองและส่ง `confirmDelivery` หรือ `confirmReceipt` ผ่าน Wallet. Contract ตรวจลายเซ็นของผู้ลงนามหลักฐานอีกครั้ง
+
+สำหรับประวัติหลักฐาน หน้าเว็บใช้ `GET /api/v1/orders/:id/evidence` คืน `{ data: [{ id, stage, submittedBy, createdAt, contentType, sizeBytes, fileHash }] }` และ `GET /api/v1/orders/:id/evidence/:evidenceId` คืน `{ data: { url } }` เป็น signed URL หลังตรวจสิทธิ์. API กลุ่มหลักฐานยังต้องให้ Developer 3 เพิ่ม รวมถึงการตรวจไฟล์จริง การจำกัดอัตรา การลงนาม และ indexer ที่สร้างข้อมูล `orders` จากเงินฝาก
 
 Indexer ใช้ `chain_events` และ `chain_checkpoints` แยกตาม chain และ Contract. ใช้ `tx_hash` กับ `log_index` กันการอ่านซ้ำ เมื่อ block hash เปลี่ยนให้ย้อนถึงบล็อกร่วมแล้วสร้างสถานะที่กระทบใหม่ ทำให้การแก้ projection กับ checkpoint อยู่ใน transaction เดียวกัน
 

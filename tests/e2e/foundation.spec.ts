@@ -68,6 +68,24 @@ test("search and keyboard-operated item filters stay within the selected game", 
   await expect(count).toHaveText("1 item");
 });
 
+test("opens a sample listing and reaches Sell from the main navigation on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/");
+  await page.getByRole("link", { name: /Prime Chassis/ }).click();
+  await expect(page).toHaveURL(/\/buy\/listings\/demo-warframe$/);
+  await expect(page.getByRole("heading", { name: "Prime Chassis" })).toBeVisible();
+  await expect(page.getByText("0.008 Sepolia ETH")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  await page.getByRole("link", { name: "Back to the marketplace" }).click();
+  await expect(page.getByRole("heading", { name: "Item Store" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Manage listings" })).toHaveCount(0);
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Sell", exact: true }).click();
+  await expect(page).toHaveURL(/\/sell$/);
+  await expect(page.getByRole("heading", { name: "Sell", exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("Supabase");
+});
+
 test("spotlight switches on click and arrow keys and browses the selected game's items", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");

@@ -84,11 +84,29 @@ it("applies the migration and enforces identity, role, and row access", async ()
       .toEqual([...demoGames].sort((first, second) => first.slug.localeCompare(second.slug)));
     expect((await db.query("select price_wei from public.listings")).rows).toEqual([{ price_wei: "10000000000000000" }]);
     await expect(db.query("select * from public.messages")).rejects.toThrow("permission denied");
+    await expect(db.query("select public.open_listing_conversation($1)", [listingId])).rejects.toThrow("permission denied");
     await db.exec("reset role; set role authenticated");
     await db.query("select set_config('request.jwt.claim.sub', $1, false)", [buyer.id]);
     expect((await db.query("select * from public.get_marketplace_viewer()")).rows).toEqual([buyer]);
     expect((await db.query("select id from public.orders")).rows).toEqual([{ id: offerId }]);
     expect((await db.query("select body from public.messages")).rows).toEqual([{ body: "Demo" }]);
+    expect((await db.query("select public.open_listing_conversation($1) as id", [listingId])).rows).toEqual([{ id: conversationId }]);
+    expect((await db.query("select * from public.get_conversation_wallets($1)", [conversationId])).rows)
+      .toEqual([{ buyer: buyer.wallet, seller: seller.wallet }]);
+    await expect(db.query("update public.offers set amount_wei = '1' where id = $1", [offerId])).rejects.toThrow("permission denied");
+    await expect(db.query("insert into public.funding_attempts (offer_id, tx_hash) values ($1, $2)", [offerId, toChainId(offerId)]))
+      .rejects.toThrow("permission denied");
+    const insertMessage = "insert into public.messages (conversation_id, sender_id, kind, body) values ($1, $2, $3, $4) returning body";
+    expect((await db.query(insertMessage, [conversationId, buyer.id, "USER", "Still available?"])).rows).toEqual([{ body: "Still available?" }]);
+    await expect(db.query(insertMessage, [conversationId, seller.id, "USER", "Forged sender"])).rejects.toThrow("row-level security");
+    await expect(db.query(insertMessage, [conversationId, null, "SYSTEM", "Fake system notice"])).rejects.toThrow("row-level security");
+    await expect(db.query("update public.messages set body = 'Edited'")).rejects.toThrow("permission denied");
+    await expect(db.query("delete from public.messages")).rejects.toThrow("permission denied");
+    expect((await db.query("update public.listings set title = 'Other seller' where id = $1 returning id", [listingId])).rows).toEqual([]);
+    const insertListing = `insert into public.listings
+      (seller_id, game_slug, title, description, quantity, region, delivery_method, price_wei, item_type)
+      values ($1, 'warframe', 'New mod', 'Demo', 1, 'Asia', 'Trade', '1', 'Mods') returning id`;
+    await expect(db.query(insertListing, [seller.id])).rejects.toThrow("row-level security");
     await expect(db.query("select * from public.evidence")).rejects.toThrow("permission denied");
     await expect(db.query("update public.users set wallet = $1", [superAdmin.wallet])).rejects.toThrow("permission denied");
     await expect(db.query("update public.staff_wallets set role = 'SUPER_ADMIN'")).rejects.toThrow("permission denied");
@@ -97,8 +115,37 @@ it("applies the migration and enforces identity, role, and row access", async ()
     expect((await db.query("select * from public.get_marketplace_viewer()")).rows).toEqual([admin]);
     expect((await db.query("select id from public.orders")).rows).toEqual([{ id: offerId }]);
     expect((await db.query("select body from public.messages")).rows).toEqual([]);
+    expect((await db.query("select * from public.get_conversation_wallets($1)", [conversationId])).rows).toEqual([]);
+    await expect(db.query(insertMessage, [conversationId, admin.id, "USER", "Outside the room"])).rejects.toThrow("row-level security");
+    await expect(db.query("select public.open_listing_conversation($1)", [listingId])).rejects.toThrow("A trading account is required");
+    await expect(db.query(insertListing, [admin.id])).rejects.toThrow("row-level security");
     await db.query("select set_config('request.jwt.claim.sub', $1, false)", [superAdmin.id]);
     expect((await db.query("select * from public.get_marketplace_viewer()")).rows).toEqual([superAdmin]);
+
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [seller.id]);
+    await expect(db.query("select public.open_listing_conversation($1)", [listingId])).rejects.toThrow("own listing");
+    expect((await db.query(insertMessage, [conversationId, seller.id, "USER", "Yes"])).rows).toEqual([{ body: "Yes" }]);
+    const created = await db.query<{ id: string }>(insertListing, [seller.id]);
+    const createdId = created.rows[0].id;
+    expect((await db.query(`update public.listings set title = 'Updated mod', status = 'PAUSED'
+      where id = $1 returning title, status`, [createdId])).rows).toEqual([{ title: "Updated mod", status: "PAUSED" }]);
+    await expect(db.query("update public.listings set status = 'SOLD' where id = $1", [createdId])).rejects.toThrow("row-level security");
+    await expect(db.query("update public.listings set seller_id = $1 where id = $2", [buyer.id, createdId])).rejects.toThrow("permission denied");
+    await db.exec("reset role; set role anon");
+    expect((await db.query("select id from public.listings where id = $1", [createdId])).rows).toEqual([]);
+    await db.exec("reset role; set role authenticated");
+    expect((await db.query("update public.listings set status = 'ACTIVE' where id = $1 returning status", [createdId])).rows).toEqual([{ status: "ACTIVE" }]);
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [buyer.id]);
+    const opened = await db.query("select public.open_listing_conversation($1) as id", [createdId]);
+    expect(opened.rows).toEqual([{ id: expect.any(String) }]);
+    expect((await db.query("select public.open_listing_conversation($1) as id", [createdId])).rows).toEqual(opened.rows);
+    await db.exec("reset role; set role service_role");
+    await db.query("update public.listings set status = 'SOLD' where id = $1", [createdId]);
+    await db.exec("reset role; set role authenticated");
+    expect((await db.query("select status from public.listings where id = $1", [createdId])).rows).toEqual([{ status: "SOLD" }]);
+    expect((await db.query("select public.open_listing_conversation($1) as id", [createdId])).rows).toEqual(opened.rows);
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [seller.id]);
+    expect((await db.query("update public.listings set status = 'ACTIVE' where id = $1 returning status", [createdId])).rows).toEqual([]);
   } finally {
     await db.close();
   }
