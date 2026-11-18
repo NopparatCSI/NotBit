@@ -4,6 +4,10 @@ import { useState } from "react";
 import type { ApiResult } from "@marketplace/shared";
 import type { EvidenceItem } from "@/lib/evidence/files";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { MarketplaceIcon } from "@/components/marketplace-icon";
+import { AdminEmpty } from "./ui";
+import { cn } from "@/lib/utils";
 
 const stageLabels = { DELIVERY: "Delivery", RECEIPT: "Receipt", DISPUTE: "Dispute" } as const;
 const partyLabels = { BUYER: "Buyer", SELLER: "Seller" } as const;
@@ -27,68 +31,69 @@ export function EvidencePanel({ orderId, items, canVerify, receiptLinks }: {
 }) {
   const [opened, setOpened] = useState<Record<string, Opened>>({});
   const [verified, setVerified] = useState<Record<string, Verified>>({});
-  const [busy, setBusy] = useState("");
+  const [busy, setBusy] = useState<Record<string, "open" | "verify" | undefined>>({});
 
   async function open(id: string) {
-    setBusy(id);
+    setBusy(current => ({ ...current, [id]: "open" }));
     try {
       const { url } = await getJson<{ url: string }>(`/api/v1/orders/${orderId}/evidence/${id}`);
       setOpened((current) => ({ ...current, [id]: { url } }));
     } catch (error) {
       setOpened((current) => ({ ...current, [id]: { error: error instanceof Error ? error.message : "Could not open." } }));
     } finally {
-      setBusy("");
+      setBusy(current => ({ ...current, [id]: undefined }));
     }
   }
 
   async function verify(id: string) {
-    setBusy(id);
+    setBusy(current => ({ ...current, [id]: "verify" }));
     try {
       const result = await getJson<{ matches: boolean; actualHash: string }>(`/api/v1/orders/${orderId}/evidence/${id}?verify=1`);
       setVerified((current) => ({ ...current, [id]: result }));
     } catch (error) {
       setVerified((current) => ({ ...current, [id]: { error: error instanceof Error ? error.message : "Could not verify." } }));
     } finally {
-      setBusy("");
+      setBusy(current => ({ ...current, [id]: undefined }));
     }
   }
 
-  if (items.length === 0) return <p className="text-sm text-muted-foreground">No evidence uploaded yet.</p>;
+  if (items.length === 0) return <AdminEmpty icon="image" title="No evidence uploaded yet" description="Files shared by the buyer and seller will appear here. Review the agreement and conversation for more context." />;
 
   return (
-    <ul className="flex flex-col gap-3">
+    <ul className="admin-evidence-grid">
       {items.map((item) => {
         const view = opened[item.id];
         const check = verified[item.id];
         return (
-          <li key={item.id} className="flex flex-col gap-2 border-b border-border pb-3">
+          <li key={item.id} className="admin-evidence-card flex flex-col gap-3">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-              <p className="font-semibold">{stageLabels[item.stage]} · {partyLabels[item.submittedBy]}</p>
-              <p className="text-xs text-muted-foreground">{item.createdText} · {(item.sizeBytes / 1024).toFixed(0)} KB</p>
+              <Badge variant="outline">{stageLabels[item.stage]}</Badge>
+              <p className="text-xs text-muted-foreground">{(item.sizeBytes / 1024).toFixed(0)} KB</p>
             </div>
-            <p className="font-mono text-xs break-all text-muted-foreground">File hash {item.fileHash}</p>
-            {receiptLinks[item.id] && <p className="text-xs text-muted-foreground">{receiptLinks[item.id]}</p>}
+            <p className="text-sm font-semibold">Submitted by {partyLabels[item.submittedBy].toLowerCase()}</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">{item.createdText}</p>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="default" onClick={() => open(item.id)} disabled={busy === item.id}>
-                {view && "url" in view ? "Reload image" : "Open image"}
+              <Button type="button" variant="outline" size="default" onClick={() => open(item.id)} disabled={Boolean(busy[item.id])}>
+                <MarketplaceIcon name="image" data-icon="inline-start" />{busy[item.id] === "open" ? "Opening…" : view && "url" in view ? "Reload image" : "Open image"}
               </Button>
               {canVerify && (
-                <Button type="button" variant="quiet" onClick={() => verify(item.id)} disabled={busy === item.id}>
-                  Verify hash
+                <Button type="button" variant="quiet" onClick={() => verify(item.id)} disabled={Boolean(busy[item.id])}>
+                  {busy[item.id] === "verify" ? "Checking…" : "Verify hash"}
                 </Button>
               )}
             </div>
             {check && ("error" in check
               ? <p role="alert" className="text-sm text-destructive">{check.error}</p>
-              : <p role="status" className={check.matches ? "text-sm" : "text-sm text-destructive"}>
+              : <p role="status" className={cn("text-xs leading-relaxed", check.matches ? "text-success" : "text-destructive")}>
                 {check.matches ? "Stored file matches the recorded hash." : `Hash mismatch. Stored file hashes to ${check.actualHash}.`}
               </p>)}
             {view && ("error" in view
               ? <p role="alert" className="text-sm text-destructive">{view.error}</p>
               // Signed URLs are short-lived and come from private storage, so next/image is not used.
               // eslint-disable-next-line @next/next/no-img-element
-              : <img src={view.url} alt={`${stageLabels[item.stage]} evidence from the ${partyLabels[item.submittedBy].toLowerCase()}`}
-                className="max-h-[28rem] w-full rounded-lg border border-border object-contain" />)}
+              : <img src={view.url} alt={`${stageLabels[item.stage]} evidence from the ${partyLabels[item.submittedBy].toLowerCase()}`} loading="lazy"
+                onError={() => setOpened(current => ({ ...current, [item.id]: { error: "This image link expired or could not be loaded. Open the image again to get a new link." } }))} />)}
+            <details className="admin-metadata"><summary>File integrity details</summary><p className="break-all font-mono text-xs">{item.fileHash}</p>{receiptLinks[item.id] && <p className="text-xs leading-relaxed">{receiptLinks[item.id]}</p>}</details>
           </li>
         );
       })}

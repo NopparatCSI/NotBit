@@ -12,7 +12,8 @@ alter table public.orders
   add column chain_order_id public.hex32,
   add column buyer_wallet public.wallet_address,
   add column seller_wallet public.wallet_address,
-  add column amount_wei public.positive_wei,
+  -- Existing orders need their offer amount before the non-null domain is applied.
+  add column amount_wei text,
   add column agreement_hash public.hex32,
   add column delivery_hash public.hex32,
   add column receipt_hash public.hex32,
@@ -29,6 +30,20 @@ alter table public.orders
   add column last_event_block bigint,
   -- False when a reorg removed the funding event. Rows stay because evidence references them.
   add column on_chain boolean not null default true;
+
+update public.orders as o set
+  chain_order_id = f.chain_order_id,
+  buyer_wallet = bu.wallet,
+  seller_wallet = su.wallet,
+  amount_wei = f.amount_wei,
+  agreement_hash = f.agreement_hash
+from public.offers as f
+join public.users as bu on bu.id = f.buyer_id
+join public.users as su on su.id = f.seller_id
+where f.id = o.id;
+
+alter table public.orders alter column amount_wei type public.positive_wei
+  using amount_wei::public.positive_wei;
 create unique index orders_chain_order_idx on public.orders (chain_id, escrow_address, chain_order_id);
 
 -- Disputes keep the party's reason (written before the openDispute transaction) and the
@@ -37,7 +52,17 @@ alter table public.disputes drop constraint disputes_check;
 alter table public.disputes
   add column expired boolean,
   add column in_review_at timestamptz,
-  add column resolver_wallet public.wallet_address,
+  add column resolver_wallet public.wallet_address;
+
+-- Preserve decisions recorded before the chain projection columns existed.
+update public.disputes as d set resolver_wallet = u.wallet
+from public.users as u where u.id = d.resolved_by and d.resolved_at is not null;
+
+update public.orders as o set resolved_at = d.resolved_at, resolver_wallet = d.resolver_wallet,
+  refund_buyer = d.refund_buyer, decision_hash = d.decision_hash
+from public.disputes as d where d.order_id = o.id and d.resolved_at is not null;
+
+alter table public.disputes
   add constraint disputes_reason_length check (reason is null or char_length(btrim(reason)) between 1 and 2000),
   add constraint disputes_resolution_check check (
     (resolved_at is null and resolved_by is null and resolver_wallet is null and refund_buyer is null

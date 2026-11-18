@@ -123,6 +123,12 @@ test("the extra games each open their own item categories and sample listings", 
 });
 
 test("the icon switches Dark and Sci-Fi, remembers the choice, and retires saved Light mode", async ({ page }) => {
+  const scriptWarnings: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "error" && message.text().includes("Encountered a script tag")) {
+      scriptWarnings.push(message.text());
+    }
+  });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.addInitScript(() => {
     if (!localStorage.getItem("orbit-color-theme")) {
@@ -156,4 +162,9 @@ test("the icon switches Dark and Sci-Fi, remembers the choice, and retires saved
   await expect(root).toHaveAttribute("data-theme", "dark");
   await expect(sciFiToggle).toBeVisible();
   await expect(moon).toBeVisible();
+  await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: "Staff console" })).toBeVisible();
+  await page.getByRole("link", { name: "NOTBIT home" }).click();
+  await expect(page.getByRole("heading", { name: "Item Store" })).toBeVisible();
+  expect(scriptWarnings).toEqual([]);
 });

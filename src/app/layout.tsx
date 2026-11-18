@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
 import { MarketplaceIcon } from "@/components/marketplace-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -21,10 +22,8 @@ const restoreTheme = `try {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: restoreTheme }} />
-      </head>
       <body>
+        <Script id="restore-theme" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: restoreTheme }} />
         <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-10 focus:rounded-lg focus:bg-primary focus:p-3 focus:text-primary-foreground">Skip to content</a>
         <header className="site-header">
           <nav aria-label="Main navigation" className="page-width site-nav">

@@ -17,6 +17,7 @@
 | ธีมและแถบเลือกเกม | [ThemeToggle](src/components/theme-toggle.tsx) · [GameSpotlight](src/components/game-spotlight.tsx) |
 | แค็ตตาล็อก หมวด และภาพของแต่ละเกม | [GameCatalog](src/components/game-catalog.tsx) · [หน้าแรก](src/app/page.tsx) · [ภาพในโปรเจกต์](public/marketplace/) |
 | หน้าบัญชี | [Account](src/app/account/page.tsx) · [WalletAccount](src/components/wallet-account.tsx) |
+| หน้าผู้ดูแล | [Admin shell](src/components/admin/shell.tsx) · [Review queue](src/components/admin/review-queue.tsx) · [Order review](src/components/admin/order-review.tsx) · [Staff history](src/components/admin/history.tsx) · [Super Admin](src/components/admin/super-admin.tsx) |
 
 ## แบรนด์และไอคอน
 
@@ -54,6 +55,8 @@
 | `--price` | ตัวเลขใช้ `--foreground` หน่วยใช้ `--muted-foreground` | `#f2ff82` | ราคาและหน่วย ETH ใน Sci-Fi |
 | `--signal` | ไอคอนค้นหาใช้ `--muted-foreground` | `#83efff` | เส้นไฮไลต์และไอคอนค้นหา Sci-Fi |
 | `--highlight` | ใช้สีหลักตามคอมโพเนนต์ | `#ff9cda` | ชมพูที่ใช้ไล่สีใน Sci-Fi |
+| `--success` | `#a1dfb0` | `#8bffb8` | Badge ของคำตัดสินที่ยืนยันแล้วและบทบาทที่ตรงกัน |
+| `--warning` | `#f1ce87` | `#f2ff82` | Badge ของงานรอตรวจหรือการพักฝากเงิน โดยมีข้อความประกอบเสมอ |
 
 ใช้คลาส Tailwind ตามบทบาท เช่น `bg-background`, `text-foreground`, `bg-card`, `text-muted-foreground`, `border-border` และ `outline-ring` ค่าสีประกอบภาพและเอฟเฟกต์เฉพาะธีมให้ใช้ selector กลางใน `globals.css`
 
@@ -182,3 +185,20 @@ Blur ใช้ `backdrop-filter: blur(12px)` ที่พื้นแถบเ�
 - ใช้ focus ที่เห็นชัด ปุ่มไอคอนมีชื่อ และสถานะเลือกมีขีดล่างหรือสัญญาณอื่นประกอบสี ตรวจ `Skip to content`, การใช้ Tab/ลูกศร และ reduced motion
 - ลองสลับเกมแล้วตรวจภาพ หมวด คำค้น จำนวนผล สถานะผลว่าง และลิงก์ไปยังร้าน ตรวจว่าไอคอนตรงธีมก่อนและหลังรีเฟรช
 - รัน `npm run typecheck` และ `npm run test:e2e` ตาม [README](README.md#ทดสอบ) โดยใช้ [ชุดทดสอบหน้าเว็บ](tests/e2e/foundation.spec.ts) เป็นจุดอ้างอิงของพฤติกรรมร่วม
+
+
+## Staff console — Developer 3
+
+- ใช้ภาษาอังกฤษและธีมเดียวกับหน้าร้าน ไม่เพิ่มธีมใหม่หรือภาพพื้นหลังที่รบกวนการตรวจหลักฐาน
+- ใช้ `.page-width` เดิม ที่จอ `1100px` ขึ้นไปแบ่งเมนูซ้าย `13rem` กับเนื้อหา เมนูมี `aria-current="page"` และขอบร่วมกับสีเพื่อระบุหน้าปัจจุบัน
+- ต่ำกว่า `640px` เมนูเป็นกริดไอคอน/ข้อความ แตะได้อย่างน้อย `44px` ส่วนแผงข้อมูลใช้ขอบ `--border` พื้น `--card` มุม `12px`; ปุ่มและตัวเลือกใช้มุม `8px`
+- หัวข้อหน้าใช้ `clamp(1.8rem, 3vw, 2.5rem)` น้ำหนัก `600` และ tracking `-0.045em` ข้อมูลเงินใช้ tabular numbers และ `--price` ใน Sci-Fi
+- คิวงานมีสรุปจากข้อมูลจริง แท็บ In review / Overdue / Resolved และค้นหาภายในคิวที่เลือก สถานะว่างอธิบายว่าจะมีข้อมูลเมื่อใด ไม่มีปุ่มที่ยังไม่ทำงาน
+- หน้าตรวจออเดอร์แยกเหตุผล หลักฐาน ข้อตกลง แชท และ timeline ออกจากแผงตัดสิน มีลิงก์ข้ามส่วนสำหรับมือถือ ข้อมูล hash/IDs เปิดดูได้เมื่อจำเป็น
+- คำตัดสินมีสองขั้น: เลือกผลและเขียนเหตุผล → ทบทวน → Confirm in MetaMask ย้อนกลับไปแก้ได้โดยข้อความไม่หาย การกด Review decision ยังไม่เรียก API หรือส่งธุรกรรม
+- หลักฐานยังต้องกดเพื่อเปิด private URL แสดงกำลังโหลด ตรวจ hash และข้อผิดพลาดแยกแต่ละไฟล์ พร้อมขอลิงก์ใหม่ได้เมื่อรูปหมดอายุ ไม่แสดงรูปส่วนตัวอัตโนมัติ
+- หน้า Super Admin แยกสถานะที่อ่านสด สถานะจาก indexer และกรณียืนยันสถานะไม่ได้ ไม่แสดงว่าเปิดรับฝากเมื่อไม่มีข้อมูลยืนยัน
+- ใช้ shadcn Card, Badge, Empty, Alert, Field, RadioGroup, Tabs, Input, Textarea และ Skeleton ที่ปรับเข้ากับ semantic tokens เดิม โดยใช้ MarketplaceIcon ชุดเดียวกัน
+- มีสถานะ loading และหน้าข้อผิดพลาดพร้อม Try again ตาม API `retry` ของ Next.js ที่ติดตั้ง
+
+ตรวจหน้าที่มีข้อมูลด้วย fixture แยกจากฐานข้อมูลจริง และตรวจหน้าเข้าถึงผ่านระบบจริงแยกกัน ผลตรวจและข้อจำกัดอยู่ใน [รายงาน UI Dev 3](docs/dev3-ui-qa.md).

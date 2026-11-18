@@ -87,3 +87,25 @@ npm run contracts:deploy:sepolia
 4. ทดสอบบน URL ของ preview ด้วย MetaMask ให้ครบทั้งซื้อขายและคืนเงินก่อนส่งลิงก์เว็บสาธิต [คู่มือเผยแพร่และตรวจ preview บน Vercel](https://vercel.com/docs/deployments)
 
 อ่าน [ข้อตกลงส่งต่องาน](docs/handoff.md) ก่อนเริ่มงานตลาด หลักฐาน หรือการอ่านเหตุการณ์จากเชน
+
+## ตรวจการเชื่อมฐานข้อมูลของ Developer 3
+
+ตั้ง Supabase URL, publishable key และ `SUPABASE_SECRET_KEY` ให้ตรงกับฐานข้อมูลเดียวกันตาม `.env.example` แล้วรัน:
+
+```powershell
+npm run db:check
+npm run db:check:storage
+```
+
+คำสั่งแรกตรวจตาราง views คิว Admin และการตั้งค่า private bucket ส่วนคำสั่งที่สองเพิ่มการอัปโหลด/ดาวน์โหลดไฟล์ตรวจสอบหนึ่งไฟล์ ตรวจ hash และการปฏิเสธ public access แล้วลบไฟล์ตรวจสอบเมื่อเสร็จ การผ่านฐานข้อมูลยังต้องตั้ง signer และ Cron แยก ดู [ลำดับปิดงาน Dev 3](docs/dev3-checklist.md).
+
+## หลังดึง branch ที่มี migration ใหม่
+
+การดึงโค้ดไม่ได้อัปเดตฐานข้อมูลให้อัตโนมัติ สำหรับ Supabase ในเครื่องที่เปิดอยู่ ให้ตรวจและใช้ migration ที่ค้างโดยไม่ล้างข้อมูล:
+
+```powershell
+npx supabase migration list --local
+npx supabase migration up --local
+```
+
+หน้า `/admin` ต้องใช้ view `staff_order_overview` จาก `20261117090000_evidence_disputes_indexer.sql`. ถ้าพบ `PGRST205` หรือข้อความว่าไม่พบ view นี้ ให้ตรวจว่าใช้ migration กับฐานข้อมูลที่ตรงกับ `NEXT_PUBLIC_SUPABASE_URL` แล้ว หากใช้ Supabase บนบริการ ให้ตรวจโปรเจกต์ที่ link ไว้และใช้ `npx supabase db push --dry-run` ก่อน `npx supabase db push`.

@@ -4,9 +4,9 @@ import { privateKeyToAccount } from "viem/accounts";
 import { escrowAbi, requiredConfirmations } from "@marketplace/shared";
 import { chainFor, createEscrowClient, getEscrowConfig, type EscrowConfig } from "@/lib/chain/config";
 import { getServiceSupabase } from "@/lib/supabase/services";
-import { findCommonAncestor, nextRange, redactError, safeHead, sameFork, serializeArgs, type StoredEvent } from "./plan";
+import { findCommonAncestor, nextRange, redactError, safeHead, sameFork, serializeArgs, smallerLogRange, type StoredEvent } from "./plan";
 
-const batchSize = 500n; // Fits common eth_getLogs range limits, including Alchemy free tier.
+const batchSize = 500n; // Reduced automatically if the RPC plan enforces a smaller range.
 const maxBatchesPerRun = 20;
 const maxEscalationsPerRun = 5;
 const escalationRetryMinutes = 10;
@@ -160,10 +160,24 @@ export async function runIndexer(): Promise<IndexerSummary> {
       }
     }
 
+    let currentBatchSize = batchSize;
     for (let batch = 0; batch < maxBatchesPerRun; batch++) {
-      const range = nextRange(checkpoint?.block ?? null, config.startBlock, head, batchSize);
+      const range = nextRange(checkpoint?.block ?? null, config.startBlock, head, currentBatchSize);
       if (!range) break;
-      const { events, toHash } = await readBatch(client, config, range.from, range.to);
+      let events: StoredEvent[];
+      let toHash: string;
+      // Retry the same starting block with a smaller range, never skip blocks.
+      for (;;) {
+        try {
+          ({ events, toHash } = await readBatch(client, config, range.from, range.to));
+          break;
+        } catch (error) {
+          const reduced = smallerLogRange(error, range.to - range.from + 1n);
+          if (reduced === null) throw error;
+          currentBatchSize = reduced;
+          range.to = range.from + reduced - 1n;
+        }
+      }
       const applied = await supabase.rpc("indexer_apply_batch", {
         p_chain_id: config.chainId, p_escrow: config.escrowAddress, p_from_block: range.from.toString(),
         p_to_block: range.to.toString(), p_to_hash: toHash, p_events: events,

@@ -13,10 +13,21 @@ export async function listReviewQueue() {
     // Past the deadline but not escalated on-chain yet. Contract already blocks the normal path.
     supabase.from("staff_order_overview").select("*").eq("on_chain", true).in("status", ["FUNDED", "DELIVERED"])
       .lte("deadline", now).order("deadline", { ascending: true }).limit(100),
-    supabase.from("staff_order_overview").select("*").not("resolved_at", "is", null)
+    supabase.from("staff_order_overview").select("*").eq("on_chain", true).not("resolved_at", "is", null)
       .order("resolved_at", { ascending: false }).limit(10),
   ]);
-  if (review.error || overdue.error || resolved.error) throw new Error("Could not load the review queue.");
+  for (const [queue, result] of Object.entries({ review, overdue, resolved })) {
+    if (result.error) {
+      const error = result.error;
+      const setupHint = error.code === "PGRST205" || error.code === "42P01"
+        ? " Apply pending Supabase migrations to the configured database (local: npx supabase migration up --local)."
+        : "";
+      throw new Error(
+        `Could not load the review queue (${queue}, ${error.code || "unknown"}): ${error.message}.${setupHint}`,
+        { cause: error },
+      );
+    }
+  }
   return {
     review: review.data as OrderOverview[],
     overdue: overdue.data as OrderOverview[],
@@ -126,6 +137,7 @@ export async function getEscrowOverview() {
     staff: staff.data as { wallet: string; role: "ADMIN" | "SUPER_ADMIN"; created_at: string }[],
     payouts: payouts.data as { wallet: string; pending_wei: string }[],
     projectedPaused: (projected.data as { funding_paused: boolean } | null)?.funding_paused ?? false,
+    projectionAvailable: projected.data !== null,
     chain,
   };
 }

@@ -1,25 +1,30 @@
 import Link from "next/link";
-import { formatEth, formatTime, shortHex, statusLabels, timeLeft } from "@/lib/admin/format";
+import { formatEth, formatTime, shortHex, timeLeft } from "@/lib/admin/format";
 import type { OrderOverview } from "@/lib/orders/context";
+import { MarketplaceIcon } from "@/components/marketplace-icon";
+import { OrderStatus } from "./ui";
+
+export type QueueOrder = Pick<OrderOverview, "id" | "status" | "listing_title" | "game_slug" | "amount_wei" | "chain_order_id" | "review_expired" | "in_review_at" | "deadline" | "resolved_at">;
 
 export function OrderList({ orders, empty, detail }: {
-  orders: OrderOverview[];
+  orders: QueueOrder[];
   empty: string;
-  detail: (order: OrderOverview) => string;
+  detail: (order: QueueOrder) => string;
 }) {
   if (orders.length === 0) return <p className="text-sm text-muted-foreground">{empty}</p>;
   return (
-    <ul className="flex flex-col">
+    <ul className="admin-order-list">
       {orders.map((order) => (
-        <li key={order.id} className="border-b border-border">
+        <li key={order.id}>
           <Link href={`/admin/orders/${order.id}`}
-            className="grid gap-1 py-3 hover:bg-muted sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6 sm:px-2">
-            <span className="font-semibold">{order.listing_title}</span>
-            <span className="text-sm sm:text-right">{formatEth(order.amount_wei)}</span>
-            <span className="text-sm text-muted-foreground">
-              {statusLabels[order.status]} · {detail(order)}
+            className="admin-order-row">
+            <span className="admin-order-symbol"><MarketplaceIcon name="file" /></span>
+            <span className="flex min-w-0 flex-col gap-2"><span className="font-semibold leading-snug">{order.listing_title}</span>
+              <span className="text-xs text-muted-foreground">{order.game_slug.replaceAll("-", " ")} <span className="font-mono">· {shortHex(order.chain_order_id)}</span></span>
             </span>
-            <span className="font-mono text-xs text-muted-foreground sm:text-right">{shortHex(order.chain_order_id)}</span>
+            <span className="admin-order-detail"><OrderStatus status={order.status} /><span>{detail(order)}</span></span>
+            <span className="admin-order-amount">{formatEth(order.amount_wei)}</span>
+            <MarketplaceIcon name="chevron" className="admin-order-arrow" />
           </Link>
         </li>
       ))}
@@ -27,7 +32,7 @@ export function OrderList({ orders, empty, detail }: {
   );
 }
 
-export const reviewDetail = (order: OrderOverview) =>
+export const reviewDetail = (order: QueueOrder) =>
   `${order.review_expired ? "Deadline passed" : "Dispute opened"} ${formatTime(order.in_review_at)}`;
-export const overdueDetail = (order: OrderOverview) => timeLeft(order.deadline);
-export const resolvedDetail = (order: OrderOverview) => `Decided ${formatTime(order.resolved_at)}`;
+export const overdueDetail = (order: QueueOrder) => timeLeft(order.deadline);
+export const resolvedDetail = (order: QueueOrder) => `Decided ${formatTime(order.resolved_at)}`;

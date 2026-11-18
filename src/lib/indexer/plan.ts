@@ -35,6 +35,21 @@ export function nextRange(checkpoint: bigint | null, startBlock: bigint, head: b
   return { from, to };
 }
 
+// Providers can restrict eth_getLogs by plan. Reduce only for explicit range/result
+// limits; network/auth errors must leave the checkpoint unchanged and surface.
+export function smallerLogRange(error: unknown, current: bigint): bigint | null {
+  if (current <= 1n || !(error instanceof Error)) return null;
+  const details = "details" in error && typeof error.details === "string" ? error.details : "";
+  const message = `${details} ${error.message}`;
+  const advertised = message.match(/up to (?:a )?(\d+) block range/i);
+  if (advertised) {
+    const limit = BigInt(advertised[1]);
+    return limit > 0n && limit < current ? limit : null;
+  }
+  return /block range|too many results|query returned more than|response size exceeded/i.test(message)
+    ? current / 2n : null;
+}
+
 // Walk stored blocks from newest to oldest and return the first whose hash still matches
 // the chain. Null means nothing stored is canonical, so the caller rewinds fully.
 export async function findCommonAncestor(

@@ -2,54 +2,31 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { requireStaff, ViewerError } from "@/lib/auth/viewer";
 import { getSupabaseConfig } from "@/lib/supabase/config";
+import { MarketplaceIcon } from "@/components/marketplace-icon";
+import { AdminShell } from "@/components/admin/shell";
 import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Staff console | NOTBIT", robots: { index: false } };
 export const dynamic = "force-dynamic";
 
-function Notice({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="page-width flex flex-col items-start gap-4 py-12 sm:py-16">
-      <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
-      {children}
-    </div>
-  );
+function AccessNotice({ message }: { message: string }) {
+  return <div className="page-width admin-access">
+    <div className="admin-access-mark"><MarketplaceIcon name="shield" /></div>
+    <p className="admin-eyebrow">NOTBIT OPERATIONS</p><h1 className="admin-title">Staff console</h1>
+    <p className="max-w-md text-sm leading-relaxed text-muted-foreground">{message}</p>
+    <Button asChild><Link href="/account"><MarketplaceIcon name="wallet" data-icon="inline-start" />Go to Wallet</Link></Button>
+    <p className="text-xs text-muted-foreground">Staff wallets only · Sepolia testnet</p>
+  </div>;
 }
 
-// Every admin page re-checks the role on the server. Hiding links is not the access check.
 export default async function AdminLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  if (!getSupabaseConfig()) {
-    return <Notice title="Staff console"><p className="text-muted-foreground">Set up Supabase to use the staff console.</p></Notice>;
-  }
-  let role: "ADMIN" | "SUPER_ADMIN";
-  try {
-    role = (await requireStaff()).role as "ADMIN" | "SUPER_ADMIN";
-  } catch (error) {
+  if (!getSupabaseConfig()) return <AccessNotice message="The staff console is not available yet. Please contact the project administrator." />;
+  let staff;
+  try { staff = await requireStaff(); }
+  catch (error) {
     if (!(error instanceof ViewerError)) throw error;
-    return (
-      <Notice title="Staff console">
-        <p role="alert" className="text-muted-foreground">
-          {error.status === 401 ? "Sign in with your staff wallet to continue."
-            : error.status === 403 ? "This wallet is not an Admin or Super Admin." : error.message}
-        </p>
-        <Button asChild variant="outline"><Link href="/account">Go to Wallet</Link></Button>
-      </Notice>
-    );
+    return <AccessNotice message={error.status === 401 ? "Connect and sign in with your staff wallet to review orders, inspect evidence, and manage disputes."
+      : error.status === 403 ? "This wallet does not have staff access. Switch to an Admin or Super Admin wallet to continue." : error.message} />;
   }
-
-  return (
-    <div className="page-width flex flex-col gap-8 py-10 sm:py-12">
-      <div className="flex flex-col gap-3 border-b border-border pb-4">
-        <p className="text-sm text-muted-foreground">{role === "SUPER_ADMIN" ? "Super Admin" : "Admin"} · Sepolia testnet, no real funds</p>
-        <nav aria-label="Staff navigation" className="flex flex-wrap gap-1">
-          <Button asChild variant="quiet" size="compact"><Link href="/admin">Review queue</Link></Button>
-          <Button asChild variant="quiet" size="compact"><Link href="/admin/history">Staff history</Link></Button>
-          {role === "SUPER_ADMIN" && (
-            <Button asChild variant="quiet" size="compact"><Link href="/admin/super">Super Admin</Link></Button>
-          )}
-        </nav>
-      </div>
-      {children}
-    </div>
-  );
+  return <AdminShell role={staff.role as "ADMIN" | "SUPER_ADMIN"} wallet={staff.wallet}>{children}</AdminShell>;
 }

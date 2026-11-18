@@ -75,8 +75,8 @@ it("applies the migration and enforces identity, role, and row access", async ()
     `, [offerId, conversationId, listingId, buyer.id, seller.id, admin.wallet,
       toChainId(offerId), toChainId(listingId), "0x" + "1".repeat(130)]);
     await db.query(`
-      insert into public.orders (id, listing_id, chain_id, escrow_address, status, deadline, funded_at)
-      values ($1, $2, 31337, $3, 'FUNDED', now() + interval '24 hours', now())
+      insert into public.orders (id, listing_id, chain_id, escrow_address, status, deadline, funded_at, amount_wei)
+      values ($1, $2, 31337, $3, 'FUNDED', now() + interval '24 hours', now(), '10000000000000000')
     `, [offerId, listingId, admin.wallet]);
 
     await db.exec("set role anon");

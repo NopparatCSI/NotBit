@@ -17,6 +17,8 @@
     "typecheck": "next typegen && tsc --noEmit && tsc -p contracts/tsconfig.json",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "db:check": "node scripts/check-dev3-database.mjs",
+    "db:check:storage": "node scripts/check-dev3-database.mjs --storage-write",
     "contracts:build": "npm run build -w @marketplace/contracts",
     "contracts:test": "npm test -w @marketplace/contracts",
     "contracts:node": "npm run node -w @marketplace/contracts",

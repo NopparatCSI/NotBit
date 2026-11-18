@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { Address, Hex } from "viem";
 import type { ApiResult } from "@marketplace/shared";
 import { Button } from "@/components/ui/button";
+import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import { explainTxError, explorerUrl, sendEscrowTransaction, type TxUpdate } from "./staff-transaction";
 
 const statusText: Record<TxUpdate["status"], string> = {
   AWAITING_SIGNATURE: "Waiting for MetaMask…",
   SUBMITTED: "Transaction sent",
   CONFIRMING: "Waiting for 3 confirmations…",
-  SUCCEEDED: "Confirmed on-chain. The page updates after the next indexer run (about 1 minute).",
+  SUCCEEDED: "Confirmed on-chain. Refresh after the next status update to see the result.",
   FAILED: "Transaction failed",
 };
 
@@ -60,13 +63,24 @@ export function DecisionForm({ orderId, chainId, escrowAddress, staffWallet, ref
   const [choice, setChoice] = useState<"refund" | "release" | "">("");
   const [reason, setReason] = useState("");
   const [preparing, setPreparing] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [invalid, setInvalid] = useState<"choice" | "reason" | null>(null);
+  const formId = useId();
+  const reasonInput = useRef<HTMLTextAreaElement>(null);
+  const firstChoice = useRef<HTMLButtonElement>(null);
   const busy = preparing || tx.pending || tx.update?.status === "SUCCEEDED";
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     tx.setError("");
-    if (!choice) return tx.setError("Choose refund or release.");
-    if (!reason.trim()) return tx.setError("Write the reason for the decision.");
+    if (!choice) {
+      setInvalid("choice"); tx.setError("Choose refund or release."); firstChoice.current?.focus(); return;
+    }
+    if (!reason.trim()) {
+      setInvalid("reason"); tx.setError("Write the reason for the decision."); reasonInput.current?.focus(); return;
+    }
+    setInvalid(null);
+    if (!reviewing) { setReviewing(true); return; }
     setPreparing(true);
     let draft: { chainOrderId: Hex; refundBuyer: boolean; decisionHash: Hex };
     try {
@@ -93,33 +107,36 @@ export function DecisionForm({ orderId, chainId, escrowAddress, staffWallet, ref
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4" aria-label="Decide dispute">
-      <fieldset className="flex flex-col gap-2" disabled={busy}>
-        <legend className="mb-2 font-semibold">Decision</legend>
-        <label className="flex items-start gap-3 rounded-lg border border-border p-3">
-          <input type="radio" name="decision" value="refund" checked={choice === "refund"}
-            onChange={() => setChoice("refund")} className="mt-1" />
-          <span><span className="font-semibold">Refund buyer</span>
-            <span className="block text-sm text-muted-foreground">{refundText}</span></span>
-        </label>
-        <label className="flex items-start gap-3 rounded-lg border border-border p-3">
-          <input type="radio" name="decision" value="release" checked={choice === "release"}
-            onChange={() => setChoice("release")} className="mt-1" />
-          <span><span className="font-semibold">Pay seller per the deal</span>
-            <span className="block text-sm text-muted-foreground">{releaseText}</span></span>
-        </label>
-      </fieldset>
-      <label className="flex flex-col gap-2">
-        <span className="font-semibold">Reason</span>
-        <textarea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={2000} rows={4}
-          disabled={busy} required
-          className="rounded-lg border border-[var(--input-border)] bg-background p-3 text-sm focus-visible:outline-2 focus-visible:outline-ring" />
-        <span className="text-xs text-muted-foreground">The reason is stored with its hash. The hash goes on-chain with the decision.</span>
-      </label>
-      <p className="text-sm text-muted-foreground">Each order can be decided once. After the transaction confirms, the funds move and cannot be reversed here.</p>
-      <div><Button type="submit" disabled={busy}>{preparing ? "Saving decision…" : "Sign decision with MetaMask"}</Button></div>
+    <form onSubmit={submit} noValidate className="flex flex-col gap-5" aria-label="Decide dispute">
+      {reviewing ? <div className="admin-decision-review">
+        <p className="admin-eyebrow">REVIEW YOUR DECISION</p>
+        <p className="font-semibold">{choice === "refund" ? "Refund buyer" : "Pay seller per the deal"}</p>
+        <p className="text-sm leading-relaxed text-muted-foreground">{choice === "refund" ? refundText : releaseText}</p>
+        <blockquote>{reason.trim()}</blockquote>
+        <p className="text-xs leading-relaxed text-muted-foreground">This decision cannot be reversed after confirmation. Gas already spent is not refunded.</p>
+        <Button type="button" variant="outline" disabled={busy} onClick={() => { setReviewing(false); tx.setError(""); }}>Back to editing</Button>
+      </div> : <FieldGroup>
+        <FieldSet disabled={busy}>
+          <FieldLegend>Choose an outcome</FieldLegend>
+          <RadioGroup value={choice} onValueChange={value => { setChoice(value as "refund" | "release"); setInvalid(null); tx.setError(""); }} aria-label="Decision outcome" aria-invalid={invalid === "choice"} aria-describedby={invalid === "choice" ? `${formId}-error` : undefined} disabled={busy}>
+            <FieldLabel htmlFor={`${formId}-refund`} className="admin-decision-choice">
+              <RadioGroupItem ref={firstChoice} id={`${formId}-refund`} value="refund" /><span>Refund buyer<span className="mt-2 block text-xs font-normal leading-relaxed text-muted-foreground">{refundText}</span></span>
+            </FieldLabel>
+            <FieldLabel htmlFor={`${formId}-release`} className="admin-decision-choice">
+              <RadioGroupItem id={`${formId}-release`} value="release" /><span>Pay seller per the deal<span className="mt-2 block text-xs font-normal leading-relaxed text-muted-foreground">{releaseText}</span></span>
+            </FieldLabel>
+          </RadioGroup>
+        </FieldSet>
+        <Field data-invalid={invalid === "reason"}>
+          <FieldLabel htmlFor={`${formId}-reason`}>Reason for this decision</FieldLabel>
+          <Textarea ref={reasonInput} id={`${formId}-reason`} value={reason} onChange={event => { setReason(event.target.value); if (invalid === "reason") { setInvalid(null); tx.setError(""); } }} maxLength={2000} rows={5} disabled={busy} required aria-invalid={invalid === "reason"} aria-describedby={`${formId}-hint${invalid === "reason" ? ` ${formId}-error` : ""}`} placeholder="Explain what the evidence shows and why this outcome is appropriate." />
+          <FieldDescription id={`${formId}-hint`}>Keep the explanation clear and specific. {reason.length}/2,000 characters.</FieldDescription>
+        </Field>
+      </FieldGroup>}
+      {tx.error && <p id={`${formId}-error`} role="alert" className="text-sm leading-relaxed text-destructive">{tx.error}</p>}
+      <Button type="submit" disabled={busy}>{preparing ? "Saving decision…" : tx.pending ? "Waiting for confirmation…" : tx.update?.status === "SUCCEEDED" ? "Decision confirmed" : reviewing ? "Confirm in MetaMask" : "Review decision"}</Button>
+      {!reviewing && <p className="text-xs leading-relaxed text-muted-foreground">You can review your choice before signing. Nothing is sent at this step.</p>}
       <TxStatusLine update={tx.update} chainId={chainId} />
-      {tx.error && <p role="alert" className="text-sm text-destructive">{tx.error}</p>}
     </form>
   );
 }
