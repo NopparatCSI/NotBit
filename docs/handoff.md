@@ -20,16 +20,24 @@
 
 Migration เปิดการอ่านผ่าน RLS แล้ว สำหรับการเขียนผ่าน client ให้เพิ่ม grants ระดับคอลัมน์และ RLS ของแต่ละฟีเจอร์ใน migration ถัดไป สำหรับเส้นทาง API ที่ใช้สิทธิ์เซิร์ฟเวอร์ ให้ตรวจ session และ ownership ก่อนเขียนทุกครั้ง
 
+ข้อเสนอใช้ `GET /api/v1/conversations/:id/offers` เพื่ออ่านคู่ค้า เครือข่าย Contract และข้อเสนอ 20 รายการล่าสุด ส่วน `POST` รับ `{ id, agreement, signedOffer }` โดยเซิร์ฟเวอร์ตรวจผู้ขาย คู่ค้า UUID/hash ลายเซ็น และอายุข้อเสนอ ก่อนเขียนด้วย `SUPABASE_SECRET_KEY`. ตาราง `offers` ยังคงปฏิเสธการเขียนจาก browser โดยตรง
+
+`POST /api/v1/orders/:id` รับ `{ hash }` ของธุรกรรมฝาก ตรวจผู้ซื้อ Contract calldata และยอดเงินก่อนเพิ่ม `funding_attempts`. `GET` คืน `chainOrderId`, `amountWei`, สถานะธุรกรรม จำนวน confirmations และสถานะออเดอร์ที่อ่านจากเชนย้อนหลัง 2 บล็อก เพื่อรอครบอย่างน้อย 3 confirmations. ตาราง `orders`, สถานะ `offers` และ `listings` ยังต้องให้ indexer ของ Developer 3 ประมวลผลจากเหตุการณ์บนเชนตามข้อตกลงเดิม
+
 ## Developer 3
 
 | เส้นทางที่เสนอ | ข้อมูลที่ใช้ |
 | --- | --- |
-| `POST /api/v1/orders/:id/evidence` | รับ multipart รูป JPEG, PNG หรือ WebP สูงสุด 10 MB ต่อรูป หลังบันทึกรูปแล้วคืน `EvidenceReceipt` ตาม schema สำหรับขั้นส่งหรือรับ |
+| `POST /api/v1/orders/:id/evidence` | รับ multipart รูป JPEG, PNG หรือ WebP สูงสุด 6 รูปต่อครั้งและ 10 MB ต่อรูป คืน `{ data: { evidence, receipt } }` หลังบันทึก |
 | `GET /api/v1/orders/:id/evidence/:evidenceId` | ตรวจคู่ค้าหรือสิทธิ์ผู้ดูแล บันทึกการเข้าถึงของผู้ดูแลก่อนออก signed URL |
 | `POST /api/v1/orders/:id/dispute` | รับเหตุผลจาก session คู่ค้า สถานะออเดอร์เปลี่ยนหลังเหตุการณ์บนเชนได้รับการยืนยัน |
 | `POST /api/v1/admin/orders/:id/decision` | ใช้ `decisionSchema` และ `hashDecision` เพื่อเตรียมข้อมูลก่อนให้ผู้ดูแลส่งธุรกรรม |
 
 `listing-images` เป็น bucket สาธารณะ ส่วน `order-evidence` เป็น bucket ส่วนตัว API เขียนหลักฐานโดยใช้ path ใหม่ทุกครั้งและเก็บ hash ของไฟล์ ผู้ดูแลเข้าคิวออเดอร์ได้ ฝั่ง API ตรวจบริบทออเดอร์ก่อนดึงแชทหรือออกลิงก์หลักฐาน
+
+หน้า Evidence ส่ง `stage` เป็น `delivery` หรือ `receipt` และฟิลด์ `files` ซ้ำตามลำดับไฟล์ Client ตรวจ `data.receipt` กับรหัสออเดอร์บนเชน ผู้ส่ง ขั้นตอน และ `hashEvidence` ของไฟล์ก่อนเรียก Contract ผ่าน Wallet
+
+ประวัติหลักฐานใช้ `GET /api/v1/orders/:id/evidence` ซึ่งคืน `{ data: { evidence } }` โดย `submittedBy` เป็น `BUYER` หรือ `SELLER` ส่วนการเปิดไฟล์ใช้ signed URL จาก `GET /api/v1/orders/:id/evidence/:evidenceId` การอัปโหลดต้องรอ indexer บันทึกออเดอร์หลังเงินฝากครบ 3 confirmations และใช้คีย์ลงนามที่ตรงกับ Contract
 
 Indexer ใช้ `chain_events` และ `chain_checkpoints` แยกตาม chain และ Contract. ใช้ `tx_hash` กับ `log_index` กันการอ่านซ้ำ เมื่อ block hash เปลี่ยนให้ย้อนถึงบล็อกร่วมแล้วสร้างสถานะที่กระทบใหม่ ทำให้การแก้ projection กับ checkpoint อยู่ใน transaction เดียวกัน
 

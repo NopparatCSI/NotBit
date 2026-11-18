@@ -3,4 +3,3 @@ ALTER TABLE "public"."orders"
 
 CREATE UNIQUE INDEX orders_canonical_listing_idx ON public.orders USING btree (chain_id, escrow_address, listing_id)
   WHERE on_chain;
-

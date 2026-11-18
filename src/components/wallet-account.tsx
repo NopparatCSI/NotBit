@@ -1,21 +1,15 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
-import { connect, createConfig, disconnect, getAccount, http, injected, signMessage, switchChain, watchAccount } from "@wagmi/core";
+import { connect, disconnect, getAccount, signMessage, switchChain, watchAccount } from "@wagmi/core";
 import { sepolia } from "viem/chains";
 import { createSiweMessage, generateSiweNonce } from "viem/siwe";
 import type { Viewer } from "@marketplace/shared";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { Button } from "@/components/ui/button";
-
-const walletConfig = createConfig({
-  chains: [sepolia],
-  connectors: [injected({ target: "metaMask" })],
-  multiInjectedProviderDiscovery: false,
-  transports: { [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || undefined) },
-});
+import { walletConfig } from "@/lib/wallet";
 
 const roleLabels = { USER: "Buyer / Seller", ADMIN: "Admin", SUPER_ADMIN: "Super Admin" } as const;
 
@@ -34,7 +28,7 @@ function navigateToLocalWalletHost() {
   return true;
 }
 
-export function WalletAccount({ viewer }: { viewer: Viewer | null }) {
+export function WalletAccount({ viewer, returnTo, children }: { viewer: Viewer | null; returnTo?: string; children?: ReactNode }) {
   const config = getSupabaseConfig();
   const router = useRouter();
   const address = useSyncExternalStore(subscribeToAccount, () => getAccount(walletConfig).address, () => undefined);
@@ -80,6 +74,7 @@ export function WalletAccount({ viewer }: { viewer: Viewer | null }) {
         setError("Wallet verification failed. Try again or check the Supabase configuration.");
         return;
       }
+      if (returnTo) router.replace(returnTo);
       router.refresh();
     } catch {
       setError("Could not connect or sign with MetaMask. Check your wallet and try again.");
@@ -114,6 +109,7 @@ export function WalletAccount({ viewer }: { viewer: Viewer | null }) {
           {address && address.toLowerCase() !== viewer.wallet && (
             <p role="status">Your MetaMask account changed. Sign out and sign in with the new account.</p>
           )}
+          {children}
           <Button type="button" variant="outline" onClick={signOut} disabled={pending}>Sign out</Button>
         </>
       ) : (

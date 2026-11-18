@@ -25,6 +25,7 @@ it("upgrades populated orders and resolved disputes without losing their history
   expect((await db.query("select id,decision_reason from public.staff_order_overview where resolved_at is not null")).rows)
     .toEqual([{ id: orderId, decision_reason: "Original decision" }]);
   await expect(db.query("update public.orders set amount_wei='0'")).rejects.toThrow("positive_wei_check");
+  await expect(db.query("update public.orders set amount_wei=null")).rejects.toThrow("positive_wei_check");
 }, 20_000);
 
 it("connects evidence receipts, a saved staff decision, and confirmed events to the review view", async () => {
@@ -57,13 +58,14 @@ it("connects evidence receipts, a saved staff decision, and confirmed events to 
 it("indexes replacement funding after a reorg while retaining evidence on the orphaned order", async () => {
   db = await createDatabase();
   await addOffer(db);
-  await addOffer(db, replacementId);
   await db.exec("set role service_role");
   const original = fundedEvent();
   await db.query("select public.indexer_apply_batch(31337,$1,1,1,$2,$3)", [escrow, original.block_hash, JSON.stringify([original])]);
   await db.query(`insert into public.evidence(order_id,submitted_by,stage,object_path,file_hash,content_type,size_bytes)
     values($1,$2,'DELIVERY','original/evidence.png',$3,'image/png',8)`, [orderId, demoViewers.seller.id, hex(8)]);
   await db.query("select public.indexer_rewind(31337,$1,1,0,null)", [escrow]);
+  // Developer 2 must be able to create a fresh offer after funding is orphaned.
+  await addOffer(db, replacementId);
   const replacement = fundedEvent(replacementId, 1, 2);
   await db.query("select public.indexer_apply_batch(31337,$1,1,1,$2,$3)", [escrow, replacement.block_hash, JSON.stringify([replacement])]);
   expect((await db.query("select id,on_chain from public.orders order by id")).rows).toEqual([

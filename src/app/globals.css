@@ -139,6 +139,23 @@ a:focus-visible {
   flex: none;
 }
 
+@media (max-width: 359px) {
+  .site-nav {
+    gap: 0.25rem;
+  }
+
+  .site-brand {
+    gap: 0.375rem;
+    font-size: 1rem;
+    letter-spacing: 0.08em;
+  }
+
+  .site-brand svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+
 .header-discover {
   min-height: 2.75rem;
   align-items: center;

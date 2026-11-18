@@ -29,20 +29,23 @@ export function POST(request: Request, { params }: Params) {
         ? "This order is already under review." : "This order is closed and can no longer be disputed.");
     }
 
-    const existing = await supabase.from("disputes").select("order_id, reason").eq("order_id", order.id).maybeSingle();
+    const existing = await supabase.from("disputes").select("order_id, reason, opened_by").eq("order_id", order.id).maybeSingle();
     if (existing.error) throw new ApiError(503, "UNAVAILABLE", "Could not load the dispute. Try again.");
-    if (existing.data?.reason) {
+    const retry = existing.data?.opened_by === viewer.id && existing.data.reason === reason;
+    if (existing.data?.reason && !retry) {
       throw new ApiError(409, "CONFLICT", "A dispute reason is already recorded for this order.");
     }
 
-    const write = existing.data
-      ? await supabase.from("disputes").update({ reason, opened_by: viewer.id })
-        .eq("order_id", order.id).is("reason", null).select("order_id")
-      : await supabase.from("disputes").insert({ order_id: order.id, opened_by: viewer.id, reason }).select("order_id");
-    if (write.error?.code === "23505" || (write.data && write.data.length === 0)) {
-      throw new ApiError(409, "CONFLICT", "A dispute reason is already recorded for this order.");
+    if (!retry) {
+      const write = existing.data
+        ? await supabase.from("disputes").update({ reason, opened_by: viewer.id })
+          .eq("order_id", order.id).is("reason", null).select("order_id")
+        : await supabase.from("disputes").insert({ order_id: order.id, opened_by: viewer.id, reason }).select("order_id");
+      if (write.error?.code === "23505" || (write.data && write.data.length === 0)) {
+        throw new ApiError(409, "CONFLICT", "A dispute reason is already recorded for this order.");
+      }
+      if (write.error) throw new ApiError(503, "UNAVAILABLE", "Could not save the dispute. Try again.");
     }
-    if (write.error) throw new ApiError(503, "UNAVAILABLE", "Could not save the dispute. Try again.");
 
     return ok({
       orderId: order.id,
@@ -52,6 +55,6 @@ export function POST(request: Request, { params }: Params) {
       status: order.status,
       // FUNDED / DELIVERED: the caller now sends openDispute(chainOrderId) from their wallet.
       requiresTransaction: canOpen,
-    }, 201);
+    }, retry ? 200 : 201);
   });
 }

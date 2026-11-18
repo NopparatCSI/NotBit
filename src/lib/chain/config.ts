@@ -14,7 +14,8 @@ export type EscrowConfig = {
 export function getEscrowConfig(): EscrowConfig | null {
   const chainId = Number(process.env.ESCROW_CHAIN_ID || chainIds.sepolia);
   if (chainId !== chainIds.sepolia && chainId !== chainIds.local) return null;
-  const escrow = walletSchema.safeParse(process.env.NEXT_PUBLIC_ESCROW_ADDRESS);
+  const environment = process.env;
+  const escrow = walletSchema.safeParse(environment.ESCROW_ADDRESS || environment.NEXT_PUBLIC_ESCROW_ADDRESS);
   const rpcUrl = process.env.ESCROW_RPC_URL
     || (chainId === chainIds.local ? "http://127.0.0.1:8545" : process.env.SEPOLIA_RPC_URL);
   if (!escrow.success || !rpcUrl) return null;
