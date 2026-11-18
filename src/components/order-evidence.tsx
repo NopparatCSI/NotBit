@@ -6,7 +6,8 @@ import { escrowAbi, requiredConfirmations, type ApiResult } from "@marketplace/s
 import { parseEventLogs, type Hex } from "viem";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { checkEvidenceReceipt, evidenceReceiptResponseSchema, evidenceRecordsSchema, hashEvidenceFiles, type EvidenceRecord, type SignedEvidenceReceipt } from "@/lib/evidence";
+import { checkEvidenceReceipt, evidenceHistorySchema, evidenceUploadSchema, hashEvidenceFiles, type EvidenceRecord, type SignedEvidenceReceipt } from "@/lib/evidence";
+import { maxFilesPerUpload } from "@/lib/evidence/files";
 import { publicEscrowClient, requireWallet, walletConfig, walletErrorMessage } from "@/lib/wallet";
 import type { Offer, OrderFunding } from "@/lib/offers/model";
 
@@ -14,7 +15,7 @@ const orderTime = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeSt
 type PendingAction = { hash: Hex; stage: 0 | 1 };
 
 async function responseData<T>(response: Response, evidence = false): Promise<T> {
-  if (evidence && (response.status === 404 || response.status === 405 || response.status === 503)) {
+  if (evidence && !response.headers.get("content-type")?.includes("application/json")) {
     throw new Error("Evidence uploads and viewing are currently unavailable. Try again later.");
   }
   if (!response.headers.get("content-type")?.includes("application/json")) throw new Error("The service returned an unexpected response. Please try again.");
@@ -32,7 +33,7 @@ function EvidenceHistory({ orderId, refreshKey }: { orderId: string; refreshKey:
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const data = await responseData<unknown>(await fetch(`/api/v1/orders/${orderId}/evidence`, { cache: "no-store", signal }), true);
-    setRecords(evidenceRecordsSchema.parse(data));
+    setRecords(evidenceHistorySchema.parse(data).evidence);
     setError("");
   }, [orderId]);
   useEffect(() => {
@@ -63,7 +64,7 @@ function EvidenceHistory({ orderId, refreshKey }: { orderId: string; refreshKey:
         {records.map((record) => (
           <li key={record.id} className="space-y-2 rounded-lg border border-border p-3 text-sm wrap-anywhere">
             <p className="font-semibold">{record.stage === "DELIVERY" ? "Delivery evidence" : record.stage === "RECEIPT" ? "Receipt evidence" : "Dispute evidence"}</p>
-            <p>{orderTime.format(new Date(record.createdAt))} UTC</p>
+            <p>{record.submittedBy === "BUYER" ? "Buyer" : "Seller"} · {orderTime.format(new Date(record.createdAt))} UTC</p>
             <p className="text-xs text-muted-foreground">File hash · {record.fileHash}</p>
             {images[record.id] && <a href={images[record.id]} target="_blank" rel="noreferrer">
               <Image unoptimized src={images[record.id]} alt={`${record.stage.toLowerCase()} evidence`} width={520} height={390} className="max-h-64 w-full object-contain" />
@@ -107,13 +108,13 @@ function EvidenceUpload({ offer, buyer, onSubmitted, disabled }: {
     try {
       const evidenceHash = await hashEvidenceFiles(files);
       const body = new FormData();
-      body.set("stage", buyer ? "RECEIPT" : "DELIVERY");
+      body.set("stage", buyer ? "receipt" : "delivery");
       for (const file of files) body.append("files", file);
       const data = await responseData<unknown>(await fetch(`/api/v1/orders/${offer.id}/evidence`, { method: "POST", body }), true);
-      const parsed = evidenceReceiptResponseSchema.safeParse(data);
+      const parsed = evidenceUploadSchema.safeParse(data);
       if (!parsed.success) throw new Error("The evidence service returned an invalid signed receipt.");
-      checkEvidenceReceipt(parsed.data, { orderId: offer.signedOffer.orderId, submitter: wallet, stage, evidenceHash });
-      setReceipt(parsed.data);
+      checkEvidenceReceipt(parsed.data.receipt, { orderId: offer.signedOffer.orderId, submitter: wallet, stage, evidenceHash });
+      setReceipt(parsed.data.receipt);
       setUploaded((value) => value + 1);
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Could not upload evidence. Please try again."); }
     finally { submitting.current = false; setBusy(false); }
@@ -145,7 +146,7 @@ function EvidenceUpload({ offer, buyer, onSubmitted, disabled }: {
     <div className="space-y-4">
       <section className="space-y-3 rounded-lg border border-border p-4">
         <h3 className="font-semibold">{buyer ? "Receipt evidence" : "Delivery evidence"}</h3>
-        <p className="text-sm text-muted-foreground">Attach at least one JPEG, PNG, or WebP image, up to 10 MB per image. Saved evidence is retained when you add new images.</p>
+        <p className="text-sm text-muted-foreground">Attach 1–{maxFilesPerUpload} JPEG, PNG, or WebP images, up to 10 MB each.</p>
         <label className="grid gap-2 text-sm font-semibold">Evidence images
           <input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy || disabled} className="w-full min-w-0"
             onChange={(event) => { setFiles(Array.from(event.target.files ?? [])); setReceipt(null); setAcknowledged(false); setError(""); }} />

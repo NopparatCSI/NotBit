@@ -47,7 +47,9 @@ npm run dev
 
 การบันทึกข้อเสนอใช้ `SUPABASE_SECRET_KEY` ฝั่งเซิร์ฟเวอร์ ตั้ง `NEXT_PUBLIC_ESCROW_ADDRESS` ตาม [ข้อมูลส่งต่อ Sepolia](docs/handoff.md#escrow-ที่ติดตั้งบน-sepolia) และใช้ `SEPOLIA_RPC_URL` หากต้องการ RPC ฝั่งเซิร์ฟเวอร์ของโครงการ สำหรับ Hardhat ใช้ `ESCROW_CHAIN_ID=31337`, `ESCROW_RPC_URL=http://127.0.0.1:8545` และที่อยู่ Contract จากการ deploy ในเครื่อง แล้วรีสตาร์ตเว็บ การเข้าสู่ระบบ Supabase ยังคงใช้ลายเซ็น Sepolia ส่วนการลงนามข้อเสนอและฝากเงินใช้เครือข่ายของ Escrow ที่ตั้งไว้
 
-หลังฝากสำเร็จ เปิดแท็บ **Evidence**. ผู้ขายแนบภาพและกด **Upload evidence → Confirm delivery**. เมื่อสถานะเป็น `DELIVERED` ผู้ซื้อแนบภาพรับสินค้า อัปโหลด และยืนยันข้อความปล่อยเงินก่อนกด **Confirm receipt**. ขั้นนี้ต้องมี API หลักฐานและคีย์ลงนามของ Developer 3 ตาม [รูปแบบ API](docs/handoff.md#developer-3) จึงจะใช้งานจริงได้ หน้าเว็บติดตามธุรกรรมต่อหลังรีเฟรชและรออย่างน้อย 3 confirmations ก่อนแสดงผลยืนยัน
+หลังฝากสำเร็จและ indexer บันทึกออเดอร์แล้ว ให้เปิดแท็บ **Evidence** ผู้ขายแนบภาพและเลือก **Upload evidence → Confirm delivery** เมื่อสถานะเป็น `DELIVERED` ผู้ซื้อแนบภาพรับสินค้า อัปโหลด และยืนยันข้อความปล่อยเงินก่อนกด **Confirm receipt** ใช้ Supabase Storage และตั้ง `EVIDENCE_SIGNER_PRIVATE_KEY` ให้ตรงกับผู้ลงนามที่กำหนดตอน deploy Contract [รูปแบบ API](docs/handoff.md#developer-3)
+
+ตั้ง RPC และ `ESCROW_START_BLOCK` เป็นบล็อกที่ deploy Contract สำหรับการทดสอบในเครื่อง ให้เรียก `POST /api/v1/internal/indexer` หลังธุรกรรมครบ 3 confirmations ด้วยหัวข้อ `Authorization: Bearer <INDEXER_SECRET>` ใช้ secret อย่างน้อย 32 ตัวอักษร
 
 ## ทดสอบ
 

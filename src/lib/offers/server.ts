@@ -31,7 +31,7 @@ type OfferRow = {
 function configuration() {
   const environment = process.env;
   const chainId = Number(environment.ESCROW_CHAIN_ID ?? "11155111");
-  const address = walletSchema.safeParse(environment.ESCROW_ADDRESS ?? environment.NEXT_PUBLIC_ESCROW_ADDRESS);
+  const address = walletSchema.safeParse(environment.ESCROW_ADDRESS || environment.NEXT_PUBLIC_ESCROW_ADDRESS);
   if ((chainId !== 11155111 && chainId !== 31337) || !address.success) {
     throw new ChatError(503, "UNAVAILABLE", "Escrow is not configured for this marketplace.");
   }

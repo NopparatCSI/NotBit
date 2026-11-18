@@ -1,0 +1,1 @@
+grant select on public.staff_wallets to service_role;

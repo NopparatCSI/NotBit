@@ -1,6 +1,7 @@
 import { evidenceReceiptSchema, hashEvidence } from "@marketplace/shared";
 import { keccak256, type Hex } from "viem";
 import { z } from "zod";
+import { maxFilesPerUpload } from "./evidence/files";
 
 export const evidenceReceiptResponseSchema = evidenceReceiptSchema.extend({
   signature: evidenceReceiptSchema.shape.signature.transform((value) => value as Hex),
@@ -9,13 +10,15 @@ export type SignedEvidenceReceipt = z.infer<typeof evidenceReceiptResponseSchema
 export const evidenceRecordsSchema = z.array(z.object({
   id: z.uuid(),
   stage: z.enum(["DELIVERY", "RECEIPT", "DISPUTE"]),
-  submittedBy: z.uuid(),
+  submittedBy: z.enum(["BUYER", "SELLER"]),
   createdAt: z.iso.datetime({ offset: true }),
   contentType: z.enum(["image/jpeg", "image/png", "image/webp"]),
   sizeBytes: z.number().int().positive(),
   fileHash: z.string().regex(/^0x[0-9a-fA-F]{64}$/),
 }));
 export type EvidenceRecord = z.infer<typeof evidenceRecordsSchema>[number];
+export const evidenceHistorySchema = z.object({ evidence: evidenceRecordsSchema });
+export const evidenceUploadSchema = evidenceHistorySchema.extend({ receipt: evidenceReceiptResponseSchema });
 
 export function evidenceContentType(bytes: Uint8Array) {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
@@ -26,6 +29,7 @@ export function evidenceContentType(bytes: Uint8Array) {
 
 export async function hashEvidenceFiles(files: readonly File[]) {
   if (files.length === 0) throw new Error("Attach at least one evidence image.");
+  if (files.length > maxFilesPerUpload) throw new Error(`Attach up to ${maxFilesPerUpload} evidence images.`);
   const hashes: Hex[] = [];
   for (const file of files) {
     if (file.size === 0 || file.size > 10 * 1024 * 1024) throw new Error("Each evidence image must be between 1 byte and 10 MB.");

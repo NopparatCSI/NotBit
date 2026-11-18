@@ -28,16 +28,16 @@ Migration เปิดการอ่านผ่าน RLS แล้ว สำ�
 
 | เส้นทางที่เสนอ | ข้อมูลที่ใช้ |
 | --- | --- |
-| `POST /api/v1/orders/:id/evidence` | รับ multipart รูป JPEG, PNG หรือ WebP สูงสุด 10 MB ต่อรูป หลังบันทึกรูปแล้วคืน `EvidenceReceipt` ตาม schema สำหรับขั้นส่งหรือรับ |
+| `POST /api/v1/orders/:id/evidence` | รับ multipart รูป JPEG, PNG หรือ WebP สูงสุด 6 รูปต่อครั้งและ 10 MB ต่อรูป คืน `{ data: { evidence, receipt } }` หลังบันทึก |
 | `GET /api/v1/orders/:id/evidence/:evidenceId` | ตรวจคู่ค้าหรือสิทธิ์ผู้ดูแล บันทึกการเข้าถึงของผู้ดูแลก่อนออก signed URL |
 | `POST /api/v1/orders/:id/dispute` | รับเหตุผลจาก session คู่ค้า สถานะออเดอร์เปลี่ยนหลังเหตุการณ์บนเชนได้รับการยืนยัน |
 | `POST /api/v1/admin/orders/:id/decision` | ใช้ `decisionSchema` และ `hashDecision` เพื่อเตรียมข้อมูลก่อนให้ผู้ดูแลส่งธุรกรรม |
 
 `listing-images` เป็น bucket สาธารณะ ส่วน `order-evidence` เป็น bucket ส่วนตัว API เขียนหลักฐานโดยใช้ path ใหม่ทุกครั้งและเก็บ hash ของไฟล์ ผู้ดูแลเข้าคิวออเดอร์ได้ ฝั่ง API ตรวจบริบทออเดอร์ก่อนดึงแชทหรือออกลิงก์หลักฐาน
 
-หน้า Evidence ของ Developer 2 ส่ง `multipart/form-data` ไปที่ `POST /api/v1/orders/:id/evidence` ด้วย `stage` เป็น `DELIVERY` หรือ `RECEIPT` และฟิลด์ `files` ซ้ำตามลำดับไฟล์ API ตอบ `{ data: EvidenceReceipt }` ตาม shared schema. Client ตรวจ UUID บนเชน ผู้ส่ง ขั้นตอน และ `hashEvidence` ของไบต์ไฟล์ที่เลือก ก่อนจำลองและส่ง `confirmDelivery` หรือ `confirmReceipt` ผ่าน Wallet. Contract ตรวจลายเซ็นของผู้ลงนามหลักฐานอีกครั้ง
+หน้า Evidence ส่ง `stage` เป็น `delivery` หรือ `receipt` และฟิลด์ `files` ซ้ำตามลำดับไฟล์ Client ตรวจ `data.receipt` กับรหัสออเดอร์บนเชน ผู้ส่ง ขั้นตอน และ `hashEvidence` ของไฟล์ก่อนเรียก Contract ผ่าน Wallet
 
-สำหรับประวัติหลักฐาน หน้าเว็บใช้ `GET /api/v1/orders/:id/evidence` คืน `{ data: [{ id, stage, submittedBy, createdAt, contentType, sizeBytes, fileHash }] }` และ `GET /api/v1/orders/:id/evidence/:evidenceId` คืน `{ data: { url } }` เป็น signed URL หลังตรวจสิทธิ์. API กลุ่มหลักฐานยังต้องให้ Developer 3 เพิ่ม รวมถึงการตรวจไฟล์จริง การจำกัดอัตรา การลงนาม และ indexer ที่สร้างข้อมูล `orders` จากเงินฝาก
+ประวัติหลักฐานใช้ `GET /api/v1/orders/:id/evidence` ซึ่งคืน `{ data: { evidence } }` โดย `submittedBy` เป็น `BUYER` หรือ `SELLER` ส่วนการเปิดไฟล์ใช้ signed URL จาก `GET /api/v1/orders/:id/evidence/:evidenceId` การอัปโหลดต้องรอ indexer บันทึกออเดอร์หลังเงินฝากครบ 3 confirmations และใช้คีย์ลงนามที่ตรงกับ Contract
 
 Indexer ใช้ `chain_events` และ `chain_checkpoints` แยกตาม chain และ Contract. ใช้ `tx_hash` กับ `log_index` กันการอ่านซ้ำ เมื่อ block hash เปลี่ยนให้ย้อนถึงบล็อกร่วมแล้วสร้างสถานะที่กระทบใหม่ ทำให้การแก้ projection กับ checkpoint อยู่ใน transaction เดียวกัน
 
