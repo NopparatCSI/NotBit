@@ -19,6 +19,7 @@ export const evidenceRecordsSchema = z.array(z.object({
 export type EvidenceRecord = z.infer<typeof evidenceRecordsSchema>[number];
 export const evidenceHistorySchema = z.object({ evidence: evidenceRecordsSchema });
 export const evidenceUploadSchema = evidenceHistorySchema.extend({ receipt: evidenceReceiptResponseSchema });
+export const disputeEvidenceUploadSchema = evidenceHistorySchema.extend({ receipt: z.null() });
 
 export function evidenceContentType(bytes: Uint8Array) {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";

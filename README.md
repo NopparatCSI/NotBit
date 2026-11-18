@@ -41,6 +41,8 @@ npm run dev
 
 ทดลองแชทด้วย Wallet บัญชีซื้อขายสองบัญชี ให้ผู้ซื้อเปิดประกาศที่เปิดขายแล้วกด **Chat with seller** จากนั้นให้ผู้ขายเปิด **Sell → Messages** และตอบในห้องเดียวกัน ผู้ซื้อกลับเข้าห้องเดิมได้จาก **Wallet → Messages**. ใช้ migration ล่าสุดและเปิด Supabase Realtime เพื่อรับข้อความใหม่โดยไม่ต้องรีเฟรช
 
+ในแท็บ **Chat** ใช้ **Attach image** เพื่อแนบ JPEG, PNG หรือ WebP หนึ่งรูปต่อข้อความ ขนาดไม่เกิน 3 MB รูปเปิดได้เฉพาะผู้ซื้อและผู้ขายในห้อง และต้องใช้ migration `20261119000000_chat_images.sql` กับ `SUPABASE_SECRET_KEY` ฝั่งเซิร์ฟเวอร์ ส่วนแท็บ **Deal summary** แสดงเวลาที่เหลือของข้อเสนอ การส่ง และการยืนยันรับตามสถานะดีล
+
 ผู้ซื้อดูข้อเสนอและออเดอร์ของตนเองได้จาก **Wallet → Purchases** ส่วนผู้ขายเปิด **Sell → Sales orders**. รายการแสดงข้อตกลงฉบับที่ลงนามและตรวจสถานะจาก Contract เปิด **Open deal** เพื่อกลับไปยังข้อเสนอที่เลือกได้ รวมถึงรายการเก่าที่อยู่หน้าถัดไป
 
 ในห้องซื้อขาย ผู้ขายเปิด **Deal summary → Create offer** กรอกราคา บัญชีตัวละคร และเวลานัดหมาย แล้วเลือก **Review offer → Sign and send offer**. ผู้ซื้ออ่านข้อตกลงและเลือก **Deposit** เพื่อฝากเงินตามข้อเสนอ ระบบแสดงฝากสำเร็จหลังตรวจสถานะบนเชนย้อนหลังอย่างน้อย 3 confirmations และตรวจต่อได้เมื่อกลับมาเปิดหน้าเดิม ข้อเสนอมีอายุ 30 นาที และข้อมูลที่ลงนามเก็บแยกจากประกาศ
@@ -48,6 +50,8 @@ npm run dev
 การบันทึกข้อเสนอใช้ `SUPABASE_SECRET_KEY` ฝั่งเซิร์ฟเวอร์ ตั้ง `NEXT_PUBLIC_ESCROW_ADDRESS` ตาม [ข้อมูลส่งต่อ Sepolia](docs/handoff.md#escrow-ที่ติดตั้งบน-sepolia) และใช้ `SEPOLIA_RPC_URL` หากต้องการ RPC ฝั่งเซิร์ฟเวอร์ของโครงการ สำหรับ Hardhat ใช้ `ESCROW_CHAIN_ID=31337`, `ESCROW_RPC_URL=http://127.0.0.1:8545` และที่อยู่ Contract จากการ deploy ในเครื่อง แล้วรีสตาร์ตเว็บ การเข้าสู่ระบบ Supabase ยังคงใช้ลายเซ็น Sepolia ส่วนการลงนามข้อเสนอและฝากเงินใช้เครือข่ายของ Escrow ที่ตั้งไว้
 
 หลังฝากสำเร็จและ indexer บันทึกออเดอร์แล้ว ให้เปิดแท็บ **Evidence** ผู้ขายแนบภาพและเลือก **Upload evidence → Confirm delivery** เมื่อสถานะเป็น `DELIVERED` ผู้ซื้อแนบภาพรับสินค้า อัปโหลด และยืนยันข้อความปล่อยเงินก่อนกด **Confirm receipt** ใช้ Supabase Storage และตั้ง `EVIDENCE_SIGNER_PRIVATE_KEY` ให้ตรงกับผู้ลงนามที่กำหนดตอน deploy Contract [รูปแบบ API](docs/handoff.md#developer-3)
+
+ระหว่างที่ออเดอร์เป็น `FUNDED` หรือ `DELIVERED` ผู้ซื้อหรือผู้ขายเปิดแท็บ **Evidence** แล้วเลือก **Open dispute** กรอกเหตุผลและกด **Confirm dispute** จากนั้นอนุมัติธุรกรรมใน MetaMask เมื่อครบ 3 confirmations สถานะจะเป็น `IN_REVIEW` และเงินจะอยู่ใน Escrow ระหว่างรอผู้ดูแลตัดสิน หากยกเลิกใน MetaMask ให้ส่งเหตุผลเดิมอีกครั้งได้ เมื่อออเดอร์อยู่ระหว่างตรวจสอบ ทั้งสองฝ่ายส่งรูปให้ผู้ดูแลได้ที่ **Add dispute evidence**
 
 ตั้ง RPC และ `ESCROW_START_BLOCK` เป็นบล็อกที่ deploy Contract สำหรับการทดสอบในเครื่อง ให้เรียก `POST /api/v1/internal/indexer` หลังธุรกรรมครบ 3 confirmations ด้วยหัวข้อ `Authorization: Bearer <INDEXER_SECRET>` ใช้ secret อย่างน้อย 32 ตัวอักษร
 

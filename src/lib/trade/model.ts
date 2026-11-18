@@ -4,6 +4,8 @@ export const conversationIdSchema = z.uuid();
 export const openConversationSchema = z.strictObject({ listingId: z.uuid() });
 export const messageBodySchema = z.string().trim().min(1).max(4000);
 export const sendMessageSchema = z.strictObject({ id: z.uuid().optional(), body: messageBodySchema });
+export const sendImageMessageSchema = z.strictObject({ id: z.uuid(), body: z.string().trim().max(4000) });
+export const maxChatImageBytes = 3 * 1024 * 1024;
 
 export type Conversation = {
   id: string;
@@ -26,6 +28,7 @@ export type ChatMessage = {
   senderId: string | null;
   kind: "USER" | "SYSTEM";
   body: string;
+  hasImage: boolean;
   createdAt: string;
 };
 

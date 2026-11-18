@@ -8,7 +8,7 @@ import {
   checkEvidenceFile, dbStage, extensionFor, maxFilesPerUpload, parseStage, uploadRateLimit, uploadRule,
   type EvidenceItem, type EvidenceStageName, type ImageType,
 } from "@/lib/evidence/files";
-import { signEvidenceReceipt } from "@/lib/evidence/signer";
+import { requireEvidenceSigner, signEvidenceReceipt } from "@/lib/evidence/signer";
 import { loadOrder, partyOf, requireOrderAccess, requireService, type OrderOverview } from "@/lib/orders/context";
 
 export const runtime = "nodejs";
@@ -119,7 +119,8 @@ export function POST(request: Request, { params }: Params) {
       });
     }
 
-    if (stage !== "dispute") await checkChainState(order, stage);
+    const signer = stage === "dispute" ? null : requireEvidenceSigner(order.chain_id);
+    if (signer) await checkChainState(order, stage);
 
     const uploaded: string[] = [];
     try {
@@ -137,8 +138,8 @@ export function POST(request: Request, { params }: Params) {
       if (error) throw new ApiError(503, "UNAVAILABLE", "Could not record the evidence. Try again.");
 
       let receipt: EvidenceReceipt | null = null;
-      if (stage !== "dispute") {
-        receipt = await signEvidenceReceipt({
+      if (stage !== "dispute" && signer) {
+        receipt = await signEvidenceReceipt(signer, {
           chainId: order.chain_id,
           escrowAddress: order.escrow_address as Address,
           orderId: order.chain_order_id,

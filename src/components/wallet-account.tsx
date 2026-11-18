@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 import { connect, disconnect, getAccount, signMessage, switchChain, watchAccount } from "@wagmi/core";
@@ -28,7 +28,7 @@ function navigateToLocalWalletHost() {
   return true;
 }
 
-export function WalletAccount({ viewer, returnTo }: { viewer: Viewer | null; returnTo?: string }) {
+export function WalletAccount({ viewer, returnTo, children }: { viewer: Viewer | null; returnTo?: string; children?: ReactNode }) {
   const config = getSupabaseConfig();
   const router = useRouter();
   const address = useSyncExternalStore(subscribeToAccount, () => getAccount(walletConfig).address, () => undefined);
@@ -109,6 +109,7 @@ export function WalletAccount({ viewer, returnTo }: { viewer: Viewer | null; ret
           {address && address.toLowerCase() !== viewer.wallet && (
             <p role="status">Your MetaMask account changed. Sign out and sign in with the new account.</p>
           )}
+          {children}
           <Button type="button" variant="outline" onClick={signOut} disabled={pending}>Sign out</Button>
         </>
       ) : (

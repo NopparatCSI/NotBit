@@ -7,7 +7,7 @@ import type { ChatMessage, Conversation, MessagePage } from "./model";
 
 const conversationColumns = `id, buyer_id, seller_id,
   listing:listings!inner(id, title, game_slug, quantity, region, delivery_method, price_wei, status)`;
-const messageColumns = "id, sender_id, kind, body, created_at";
+export const messageColumns = "id, sender_id, kind, body, image_path, created_at";
 const pageSize = 50;
 
 type ConversationRow = {
@@ -22,6 +22,7 @@ type MessageRow = {
   sender_id: string | null;
   kind: ChatMessage["kind"];
   body: string;
+  image_path: string | null;
   created_at: string;
 };
 
@@ -31,13 +32,13 @@ export class ChatError extends Error {
   }
 }
 
-async function requireDatabase() {
+export async function requireDatabase() {
   const supabase = await createServerSupabase();
   if (!supabase) throw new ChatError(503, "UNAVAILABLE", "Supabase is not configured.");
   return supabase;
 }
 
-function checkError(error: { code: string } | null) {
+export function checkError(error: { code: string } | null) {
   if (!error) return;
   if (error.code === "42501") throw new ChatError(403, "FORBIDDEN", "You do not have access to this conversation.");
   throw new ChatError(503, "UNAVAILABLE", "Messages are temporarily unavailable. Please try again.");
@@ -47,8 +48,8 @@ function toConversation(row: ConversationRow): Conversation {
   return { id: row.id, buyerId: row.buyer_id, sellerId: row.seller_id, listing: row.listing };
 }
 
-function toMessage(row: MessageRow): ChatMessage {
-  return { id: row.id, senderId: row.sender_id, kind: row.kind, body: row.body, createdAt: row.created_at };
+export function toMessage(row: MessageRow): ChatMessage {
+  return { id: row.id, senderId: row.sender_id, kind: row.kind, body: row.body, hasImage: row.image_path !== null, createdAt: row.created_at };
 }
 
 export async function openConversation(listingId: string) {
@@ -107,7 +108,7 @@ export async function sendMessage(conversationId: string, senderId: string, body
     const existing = await supabase.from("messages").select(messageColumns)
       .eq("id", id).eq("conversation_id", conversationId).eq("sender_id", senderId).maybeSingle();
     checkError(existing.error);
-    if (existing.data?.body === body) return toMessage(existing.data);
+    if (existing.data?.body === body && !existing.data.image_path) return toMessage(existing.data);
     throw new ChatError(409, "CONFLICT", "This message ID has already been used.");
   }
   checkError(error);
@@ -118,7 +119,9 @@ export async function sendMessage(conversationId: string, senderId: string, body
 export async function chatResponse<T>(action: () => Promise<T>, status = 200) {
   const headers = { "Cache-Control": "private, no-store" };
   try {
-    return Response.json({ data: await action() } satisfies ApiResult<T>, { status, headers });
+    const data = await action();
+    if (data instanceof Response) return data;
+    return Response.json({ data } satisfies ApiResult<T>, { status, headers });
   } catch (error) {
     if (error instanceof ViewerError) {
       const code = error.status === 401 ? "UNAUTHENTICATED" : error.status === 403 ? "FORBIDDEN" : "UNAVAILABLE";

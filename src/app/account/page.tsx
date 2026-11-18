@@ -27,15 +27,16 @@ export default async function Account({ searchParams }: { searchParams: Promise<
     <div className="page-width flex flex-col gap-6 py-12 sm:py-16">
       <h1 className="text-4xl font-semibold tracking-tight">Wallet account</h1>
       {message && <p role="alert" className="text-destructive">{message}</p>}
-      <WalletAccount viewer={viewer} returnTo={destination} />
-      {viewer?.role === "USER" && (
-        <nav aria-label="Trading account" className="flex flex-wrap gap-2">
-          {destination?.startsWith(listingPath) && <Button asChild variant="outline"><Link href={destination}>Back to listing</Link></Button>}
-          <Button asChild variant="outline"><Link href="/trade">Messages</Link></Button>
-          <Button asChild variant="outline"><Link href="/buy">Purchases</Link></Button>
-          <Button asChild variant="outline"><Link href="/sell/orders">Sales orders</Link></Button>
-        </nav>
-      )}
+      <WalletAccount viewer={viewer} returnTo={destination}>
+        {viewer?.role === "USER" && (
+          <nav aria-label="Trading account" className="flex flex-wrap gap-2">
+            {destination?.startsWith(listingPath) && <Button asChild variant="outline"><Link href={destination}>Back to listing</Link></Button>}
+            <Button asChild variant="outline"><Link href="/trade">Messages</Link></Button>
+            <Button asChild variant="outline"><Link href="/buy">Purchases</Link></Button>
+            <Button asChild variant="outline"><Link href="/sell/orders">Sales orders</Link></Button>
+          </nav>
+        )}
+      </WalletAccount>
     </div>
   );
 }

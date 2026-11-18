@@ -20,6 +20,13 @@ async function result<T>(response: Response): Promise<T> {
 const inputClass = "w-full min-w-0 rounded-lg border border-border bg-background px-3 py-2";
 const dateFormat = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
 
+function formatRemainingTime(milliseconds: number) {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds / 60) % 60;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
 function OfferForm({ room, context, onSaved }: { room: Conversation; context: OfferContext; onSaved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -161,7 +168,6 @@ function OfferCard({ offer, room, buyer, context, onFunded, onEvidence }: { offe
     async function update() {
       if (!active || checking) return;
       checking = true;
-      setNow(Date.now());
       try { await check(); }
       catch (failure) { if (active) setError(failure instanceof Error ? failure.message : "Deposit verification is unavailable."); }
       finally { checking = false; }
@@ -171,6 +177,25 @@ function OfferCard({ offer, room, buyer, context, onFunded, onEvidence }: { offe
     window.addEventListener("focus", update);
     return () => { active = false; window.clearInterval(interval); window.removeEventListener("focus", update); };
   }, [check]);
+
+  const confirmed = funding?.status === "CONFIRMED";
+  const actionDeadline = confirmed && (funding.orderStatus === "FUNDED" || funding.orderStatus === "DELIVERED")
+    ? funding.deadline : null;
+  const offerDeadline = !confirmed && offer.status === "OPEN" ? offer.signedOffer.expiresAt : null;
+  const deadline = actionDeadline ?? offerDeadline;
+
+  useEffect(() => {
+    if (deadline === null) return;
+    const deadlineMs = deadline * 1000;
+    function tick() {
+      const current = Date.now();
+      setNow(current);
+      if (current >= deadlineMs) window.clearInterval(interval);
+    }
+    const interval = window.setInterval(tick, 1000);
+    tick();
+    return () => window.clearInterval(interval);
+  }, [deadline]);
 
   async function deposit() {
     if (operation.current) return;
@@ -211,13 +236,16 @@ function OfferCard({ offer, room, buyer, context, onFunded, onEvidence }: { offe
 
   const expired = offer.status === "EXPIRED" || (now > 0 && now >= offer.signedOffer.expiresAt * 1000);
   const pending = funding?.status === "SUBMITTED" || funding?.status === "CONFIRMING";
-  const confirmed = funding?.status === "CONFIRMED";
   return (
     <section className="space-y-3 rounded-xl border border-border bg-card p-4">
       <h3 className="font-semibold">{confirmed ? "Deposit confirmed" : expired ? "Expired offer" : "Signed offer"}</h3>
       <OfferTerms offer={offer} />
       <p className="text-xs text-muted-foreground wrap-anywhere">Order ID · {offer.id}</p>
-      <p className="text-sm text-muted-foreground">Expires {dateFormat.format(new Date(offer.signedOffer.expiresAt * 1000))} UTC</p>
+      {!confirmed && offer.status !== "FUNDED" && <p className="text-sm text-muted-foreground">Expires {dateFormat.format(new Date(offer.signedOffer.expiresAt * 1000))} UTC</p>}
+      {deadline !== null && now > 0 && <p role="timer" className="text-sm tabular-nums">
+        {deadline * 1000 <= now ? (actionDeadline === null ? "Offer expired" : "Deadline passed")
+          : `${actionDeadline === null ? "Offer expires in" : funding?.orderStatus === "FUNDED" ? "Delivery due in" : "Receipt due in"} ${formatRemainingTime(deadline * 1000 - now)}`}
+      </p>}
       <p className="text-xs text-muted-foreground">Character names have not been verified with the game.</p>
       {buyer && !confirmed && <>
         <p className="text-sm">Your deposit is held in escrow. The seller receives 95% after receipt confirmation or an admin decision. Gas is paid separately.</p>
@@ -225,7 +253,7 @@ function OfferCard({ offer, room, buyer, context, onFunded, onEvidence }: { offe
       </>}
       {confirmed && <>
         <p role="status">{funding.orderStatus} · At least {requiredConfirmations} confirmations.
-          {(funding.orderStatus === "FUNDED" || funding.orderStatus === "DELIVERED") && ` ${funding.orderStatus === "FUNDED" ? "Delivery" : "Receipt"} deadline ${dateFormat.format(new Date(funding.deadline! * 1000))} UTC.`}
+          {actionDeadline !== null && ` ${funding.orderStatus === "FUNDED" ? "Delivery" : "Receipt"} deadline ${dateFormat.format(new Date(actionDeadline * 1000))} UTC.`}
         </p>
         <Button type="button" variant="outline" onClick={onEvidence}>View evidence and next action</Button>
       </>}

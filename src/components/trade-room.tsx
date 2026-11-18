@@ -1,6 +1,7 @@
 "use client";
 
 import { createBrowserClient } from "@supabase/ssr";
+import Image from "next/image";
 import { demoGames, splitPayment, type ApiResult } from "@marketplace/shared";
 import { Tabs } from "radix-ui";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
@@ -11,7 +12,7 @@ import { OrderEvidence } from "@/components/order-evidence";
 import type { Offer } from "@/lib/offers/model";
 import { listingStatusLabel } from "@/lib/listings/model";
 import { getSupabaseConfig } from "@/lib/supabase/config";
-import { messageBodySchema, type ChatMessage, type Conversation, type MessagePage } from "@/lib/trade/model";
+import { maxChatImageBytes, messageBodySchema, type ChatMessage, type Conversation, type MessagePage } from "@/lib/trade/model";
 
 const messageTime = new Intl.DateTimeFormat("en-GB", {
   month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC", timeZoneName: "short",
@@ -30,15 +31,19 @@ async function readResult<T>(response: Response): Promise<T> {
   return result.data;
 }
 
-function TradeChat({ room, viewerId, initialHistory }: { room: Conversation; viewerId: string; initialHistory: MessagePage }) {
+function TradeChat({ room, viewerId, initialHistory, active }: {
+  room: Conversation; viewerId: string; initialHistory: MessagePage; active: boolean;
+}) {
   const endpoint = `/api/v1/conversations/${room.id}/messages`;
   const [history, setHistory] = useState(initialHistory);
   const [draft, setDraft] = useState("");
+  const [image, setImage] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
   const [liveUnavailable, setLiveUnavailable] = useState(false);
   const [error, setError] = useState("");
-  const retry = useRef<{ id: string; body: string } | null>(null);
+  const retry = useRef<{ id: string; body: string; image: File | null } | null>(null);
+  const imageInput = useRef<HTMLInputElement>(null);
   const thread = useRef<HTMLDivElement>(null);
   const followLatest = useRef(true);
   const earlierHeight = useRef<number | null>(null);
@@ -88,14 +93,14 @@ function TradeChat({ room, viewerId, initialHistory }: { room: Conversation; vie
 
   useLayoutEffect(() => {
     const element = thread.current;
-    if (!element) return;
+    if (!element || !active) return;
     if (earlierHeight.current !== null) {
       element.scrollTop += element.scrollHeight - earlierHeight.current;
       earlierHeight.current = null;
     } else if (followLatest.current) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [history.messages]);
+  }, [active, history.messages]);
 
   async function loadEarlier() {
     if (!history.nextBefore) return;
@@ -115,22 +120,34 @@ function TradeChat({ room, viewerId, initialHistory }: { room: Conversation; vie
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (sending) return;
-    const parsed = messageBodySchema.safeParse(draft);
-    if (!parsed.success) return;
+    const body = draft.trim();
+    if (!image && !messageBodySchema.safeParse(body).success) return;
 
     setSending(true);
     setError("");
     try {
-      if (retry.current?.body !== parsed.data) retry.current = { id: crypto.randomUUID(), body: parsed.data };
-      const message = await readResult<ChatMessage>(await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(retry.current),
-      }));
+      if (retry.current?.body !== body || retry.current.image !== image) {
+        retry.current = { id: crypto.randomUUID(), body, image };
+      }
+      const { id } = retry.current;
+      const payload: RequestInit = { method: "POST" };
+      if (image) {
+        const form = new FormData();
+        form.set("id", id);
+        form.set("body", body);
+        form.set("image", image);
+        payload.body = form;
+      } else {
+        payload.headers = { "Content-Type": "application/json" };
+        payload.body = JSON.stringify({ id, body });
+      }
+      const message = await readResult<ChatMessage>(await fetch(endpoint, payload));
       followLatest.current = true;
       setHistory((current) => ({ ...current, messages: mergeMessages(current.messages, [message]) }));
       retry.current = null;
       setDraft("");
+      setImage(null);
+      if (imageInput.current) imageInput.current.value = "";
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : "Could not send the message.");
     } finally {
@@ -167,7 +184,9 @@ function TradeChat({ room, viewerId, initialHistory }: { room: Conversation; vie
                   <span className="font-semibold">{label}</span>
                   <time dateTime={message.createdAt}>{messageTime.format(new Date(message.createdAt))}</time>
                 </div>
-                <p className="whitespace-pre-wrap">{message.body}</p>
+                {message.body && <p className="whitespace-pre-wrap">{message.body}</p>}
+                {message.hasImage && <Image unoptimized src={`${endpoint}/${message.id}/image`} alt={`Chat image from ${label.toLowerCase()}`}
+                  width={320} height={240} className="mt-2 h-auto max-h-64 w-auto max-w-full rounded-md object-contain" />}
               </li>
             );
           })}
@@ -175,9 +194,29 @@ function TradeChat({ room, viewerId, initialHistory }: { room: Conversation; vie
       </div>
       <form onSubmit={submit} className="grid gap-2">
         <label htmlFor="trade-message" className="text-sm font-semibold">Message</label>
-        <textarea id="trade-message" name="message" rows={3} maxLength={4000} value={draft} disabled={sending} required
+        <textarea id="trade-message" name="message" rows={3} maxLength={4000} value={draft} disabled={sending} required={!image}
           onChange={(event) => setDraft(event.target.value)} className="w-full rounded-lg border border-border bg-background p-3" />
-        <Button type="submit" className="justify-self-end" disabled={sending || !draft.trim()}>{sending ? "Sending…" : "Send message"}</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="grid min-w-0 gap-1 text-sm">Attach image <span className="text-muted-foreground">JPEG, PNG, or WebP up to 3 MB</span>
+            <input ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" disabled={sending} className="w-full min-w-0"
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                if (file && file.size > maxChatImageBytes) {
+                  event.target.value = "";
+                  setImage(null);
+                  setError("Choose an image up to 3 MB.");
+                  return;
+                }
+                setImage(file);
+                setError("");
+              }} />
+          </label>
+          {image && <Button type="button" variant="outline" disabled={sending} onClick={() => {
+            setImage(null);
+            if (imageInput.current) imageInput.current.value = "";
+          }}>Remove image</Button>}
+        </div>
+        <Button type="submit" className="justify-self-end" disabled={sending || (!draft.trim() && !image)}>{sending ? "Sending…" : "Send message"}</Button>
       </form>
       {error && <p role="alert" className="text-destructive">{error}</p>}
     </section>
@@ -196,13 +235,13 @@ export function TradeRoom({ room, viewerId, initialHistory, initialOfferId }: { 
   const fee = splitPayment(listing.price_wei).feeWei;
 
   return (
-    <Tabs.Root value={tab} onValueChange={setTab} className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-      <Tabs.List aria-label="Trading room" className="flex flex-wrap gap-4 lg:col-span-2">
-        <Tabs.Trigger asChild value="summary"><Button variant="filter" type="button">Deal summary</Button></Tabs.Trigger>
-        <Tabs.Trigger asChild value="chat"><Button variant="filter" type="button">Chat</Button></Tabs.Trigger>
-        <Tabs.Trigger asChild value="evidence"><Button variant="filter" type="button">Evidence</Button></Tabs.Trigger>
+    <Tabs.Root value={tab} onValueChange={setTab} className="grid min-w-0 gap-4">
+      <Tabs.List aria-label="Trading room" className="flex flex-wrap gap-2 [&_[aria-selected=true]]:border-primary [&_[aria-selected=true]]:bg-primary/15">
+        <Tabs.Trigger asChild value="summary"><Button variant="outline" type="button">Deal summary</Button></Tabs.Trigger>
+        <Tabs.Trigger asChild value="chat"><Button variant="outline" type="button">Chat</Button></Tabs.Trigger>
+        <Tabs.Trigger asChild value="evidence"><Button variant="outline" type="button">Evidence</Button></Tabs.Trigger>
       </Tabs.List>
-      <Tabs.Content value="summary" forceMount className={`min-w-0 space-y-4 ${tab === "evidence" ? "hidden" : "data-[state=inactive]:hidden lg:data-[state=inactive]:block"}`}>
+      <Tabs.Content value="summary" forceMount className="min-w-0 space-y-4 data-[state=inactive]:hidden">
         <section className="rounded-xl border border-border bg-card p-4 wrap-anywhere">
           <h2 className="mb-3 text-xl font-semibold">Deal summary</h2>
           <dl className="grid gap-2">
@@ -218,10 +257,10 @@ export function TradeRoom({ room, viewerId, initialHistory, initialOfferId }: { 
         </section>
         <TradeOffers room={room} viewerId={viewerId} onFunded={rememberFunded} onEvidence={showEvidence} initialOfferId={initialOfferId} />
       </Tabs.Content>
-      <Tabs.Content value="chat" forceMount className={`min-w-0 ${tab === "evidence" ? "hidden" : "data-[state=inactive]:hidden lg:data-[state=inactive]:block"}`}>
-        <TradeChat room={room} viewerId={viewerId} initialHistory={initialHistory} />
+      <Tabs.Content value="chat" forceMount className="min-w-0 data-[state=inactive]:hidden">
+        <TradeChat room={room} viewerId={viewerId} initialHistory={initialHistory} active={tab === "chat"} />
       </Tabs.Content>
-      <Tabs.Content value="evidence" className="min-w-0 space-y-4 lg:col-span-2">
+      <Tabs.Content value="evidence" className="min-w-0 space-y-4">
         {fundedOffers.length === 0 && <p className="text-muted-foreground">Evidence becomes available after the deposit is confirmed.</p>}
         {fundedOffers.map((offer) => <OrderEvidence key={offer.id} offer={offer} buyer={viewerId === room.buyerId} />)}
       </Tabs.Content>

@@ -1,5 +1,6 @@
 import { requireTradeUser } from "@/lib/auth/viewer";
 import { conversationIdSchema, sendMessageSchema } from "@/lib/trade/model";
+import { sendImageMessage } from "@/lib/trade/images";
 import { ChatError, chatResponse, listMessages, readChatInput, requireConversation, sendMessage } from "@/lib/trade/server";
 
 type MessageRoute = { params: Promise<{ id: string }> };
@@ -26,6 +27,9 @@ export function GET(request: Request, route: MessageRoute) {
 export function POST(request: Request, route: MessageRoute) {
   return chatResponse(async () => {
     const { id, viewer } = await requireChat(route);
+    if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() === "multipart/form-data") {
+      return sendImageMessage(request, id, viewer.id);
+    }
     const input = await readChatInput(request, sendMessageSchema, "Enter a message between 1 and 4,000 characters.");
     return sendMessage(id, viewer.id, input.body, input.id);
   }, 201);
