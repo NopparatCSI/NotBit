@@ -1,22 +1,25 @@
 "use client";
 
 import Image, { type StaticImageData } from "next/image";
+import Link from "next/link";
 import { ToggleGroup } from "radix-ui";
 import { useRef, useState } from "react";
 import { GameSpotlight, type SpotlightGame } from "@/components/game-spotlight";
 import { MarketplaceIcon } from "@/components/marketplace-icon";
 import { Button } from "@/components/ui/button";
 
-const allItems = "All items";
+const allItems = "all";
 
 export type CatalogGame = SpotlightGame & {
   itemTypes: readonly string[];
-  listings: readonly { name: string; type: string; price: string; artwork: StaticImageData }[];
+  listings: readonly { id: string; name: string; type: string | null; price: string; artwork: StaticImageData | string | null }[];
 };
 
-export function GameCatalog({ games, initialGame }: {
+export function GameCatalog({ games, initialGame, live = false, error }: {
   games: readonly CatalogGame[];
   initialGame: string;
+  live?: boolean;
+  error?: string;
 }) {
   const [gameSlug, setGameSlug] = useState(initialGame);
   const [query, setQuery] = useState("");
@@ -27,8 +30,8 @@ export function GameCatalog({ games, initialGame }: {
 
   const terms = query.toLowerCase().trim().split(/\s+/);
   const results = game.listings.filter((listing) => {
-    const text = `${listing.name} ${listing.type}`.toLowerCase();
-    return (itemType === allItems || listing.type === itemType) && terms.every((term) => text.includes(term));
+    const text = `${listing.name} ${listing.type ?? ""}`.toLowerCase();
+    return (itemType === allItems || `type:${listing.type}` === itemType) && terms.every((term) => text.includes(term));
   });
 
   function clearSearch() {
@@ -80,42 +83,51 @@ export function GameCatalog({ games, initialGame }: {
             value={itemType}
             onValueChange={(value) => { if (value) setItemType(value); }}
           >
-            {[allItems, ...game.itemTypes].map((type) => (
-              <ToggleGroup.Item key={type} value={type} asChild>
+            <ToggleGroup.Item value={allItems} asChild>
+              <Button type="button" variant="filter" size="text">All items</Button>
+            </ToggleGroup.Item>
+            {game.itemTypes.map((type) => (
+              <ToggleGroup.Item key={type} value={`type:${type}`} asChild>
                 <Button type="button" variant="filter" size="text">{type}</Button>
               </ToggleGroup.Item>
             ))}
           </ToggleGroup.Root>
           <div className="store-results-heading">
-            <h3>Sample listings</h3>
+            <h3>{live ? "Listings" : "Sample listings"}</h3>
             <p role="status" className="result-count">{results.length} {results.length === 1 ? "item" : "items"}</p>
           </div>
-          {results.length ? (
+          {error ? <p role="alert" className="text-destructive">{error}</p> : results.length ? (
             <ul className="item-grid">
               {results.map((listing) => (
-                <li key={listing.name} className="store-item">
-                  <div className="store-item-art">
-                    <Image
-                      src={listing.artwork}
-                      alt=""
-                      fill
-                      sizes="(min-width: 1360px) 430px, (min-width: 640px) 32vw, 50vw"
-                    />
-                  </div>
-                  <div className="store-item-details">
-                    <div>
-                      <h4>{listing.name}</h4>
-                      <p>{listing.type}</p>
+                <li key={listing.id} className="store-item">
+                  <Link href={`/buy/listings/${listing.id}`} className="block focus-visible:outline-2 focus-visible:outline-ring">
+                    {listing.artwork && (
+                      <div className="store-item-art">
+                        <Image
+                          src={listing.artwork}
+                          alt=""
+                          fill
+                          unoptimized={typeof listing.artwork === "string"}
+                          sizes="(min-width: 1360px) 430px, (min-width: 640px) 32vw, 50vw"
+                        />
+                      </div>
+                    )}
+                    <div className="store-item-details">
+                      <div className="min-w-0 wrap-anywhere">
+                        <h4>{listing.name}</h4>
+                        {listing.type && <p>{listing.type}</p>}
+                      </div>
+                      <p className="item-price min-w-0 max-w-full wrap-anywhere">{listing.price} <span>ETH</span></p>
                     </div>
-                    <p className="item-price">{listing.price} <span>ETH</span></p>
-                  </div>
+                  </Link>
                 </li>
               ))}
             </ul>
           ) : (
             <div className="empty-catalog">
               <p className="font-semibold">
-                {query.trim() || itemType === allItems ? "No sample listings match your filters." : `No sample listings in ${itemType}.`}
+                {live ? "No listings match your filters." :
+                  query.trim() || itemType === allItems ? "No sample listings match your filters." : `No sample listings in ${itemType.slice("type:".length)}.`}
               </p>
               <Button type="button" variant="outline" onClick={() => { setItemType(allItems); clearSearch(); }}>
                 Clear filters

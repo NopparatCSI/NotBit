@@ -1,29 +1,22 @@
 "use client";
 
 import {
-  connect, createConfig, getAccount, http, injected, simulateContract, switchChain, waitForTransactionReceipt, writeContract,
+  connect, getAccount, simulateContract, switchChain, waitForTransactionReceipt, writeContract,
 } from "@wagmi/core";
-import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError, type Address, type Hex } from "viem";
+import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError, parseEventLogs, type Address, type Hex } from "viem";
 import { hardhat, sepolia } from "viem/chains";
 import { escrowAbi, requiredConfirmations, type TransactionStatus } from "@marketplace/shared";
+import { walletConfig } from "@/lib/wallet";
 
 // Staff send their own transactions. The contract checks admin() / superAdmin() itself.
-export const staffWalletConfig = createConfig({
-  chains: [sepolia, hardhat],
-  connectors: [injected({ target: "metaMask" })],
-  multiInjectedProviderDiscovery: false,
-  transports: {
-    [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || undefined),
-    [hardhat.id]: http(),
-  },
-});
+export const staffWalletConfig = walletConfig;
 
 export type EscrowCall =
   | { functionName: "resolveDispute"; args: readonly [Hex, boolean, Hex] }
   | { functionName: "escalateExpiredOrder"; args: readonly [Hex] }
   | { functionName: "setFundingPaused"; args: readonly [boolean] };
 
-export type TxUpdate = { status: TransactionStatus; hash?: Hex; message?: string };
+export type TxUpdate = { status: TransactionStatus | "UNKNOWN"; hash?: Hex; message?: string };
 
 class TxSetupError extends Error {}
 
@@ -110,6 +103,16 @@ export async function sendEscrowTransaction(input: {
     input.onUpdate({ status: "FAILED", hash, message: "The transaction reverted on-chain." });
     return hash;
   }
+  const events = parseEventLogs({ abi: escrowAbi, logs: receipt.logs });
+  const call = input.call;
+  const matched = events.some(event => {
+    if (event.address.toLowerCase() !== input.escrowAddress.toLowerCase()) return false;
+    if (call.functionName === "resolveDispute") return event.eventName === "DisputeResolved" && event.args.orderId === call.args[0] && event.args.refundBuyer === call.args[1] && event.args.decisionHash === call.args[2];
+    if (call.functionName === "escalateExpiredOrder") return event.eventName === "OrderInReview" && event.args.orderId === call.args[0] && event.args.expired;
+    return event.eventName === "FundingPauseChanged" && event.args.paused === call.args[0];
+  });
+  if (!matched) { input.onUpdate({ status: "UNKNOWN", hash, message: "No matching action event was found. Check the transaction before retrying." }); return hash; }
+  if (receipt.transactionHash !== hash) { hash = receipt.transactionHash; await input.onSubmitted?.(hash); }
   input.onUpdate({ status: "SUCCEEDED", hash });
   return hash;
 }

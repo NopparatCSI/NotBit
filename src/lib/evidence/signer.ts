@@ -1,7 +1,7 @@
 import "server-only";
-import type { Address, Hex } from "viem";
+import { isAddressEqual, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { escrowDomain, evidenceReceiptSchema, evidenceReceiptTypes, type EvidenceReceipt } from "@marketplace/shared";
+import { chainIds, escrowDomain, evidenceReceiptSchema, evidenceReceiptTypes, walletSchema, type EvidenceReceipt } from "@marketplace/shared";
 import { ApiError } from "@/lib/api/response";
 
 function signerAccount() {
@@ -12,12 +12,20 @@ function signerAccount() {
   return privateKeyToAccount(key as Hex);
 }
 
-export function evidenceSignerAddress() {
-  return signerAccount().address.toLowerCase();
+export function requireEvidenceSigner(chainId: number) {
+  const account = signerAccount();
+  const expectedAddress = process.env.SEPOLIA_EVIDENCE_SIGNER_ADDRESS;
+  if (chainId === chainIds.sepolia) {
+    const expected = walletSchema.safeParse(expectedAddress);
+    if (!expected.success || !isAddressEqual(account.address, expected.data)) {
+      throw new ApiError(503, "UNAVAILABLE", "The evidence signer does not match the configured Sepolia escrow signer.");
+    }
+  }
+  return account;
 }
 
 // Signs the EIP-712 receipt the contract checks in confirmDelivery / confirmReceipt.
-export async function signEvidenceReceipt(input: {
+export async function signEvidenceReceipt(account: ReturnType<typeof requireEvidenceSigner>, input: {
   chainId: number;
   escrowAddress: Address;
   orderId: Hex;
@@ -28,7 +36,7 @@ export async function signEvidenceReceipt(input: {
   const message = {
     orderId: input.orderId, submitter: input.submitter, stage: input.stage, evidenceHash: input.evidenceHash,
   };
-  const signature = await signerAccount().signTypedData({
+  const signature = await account.signTypedData({
     domain: escrowDomain(input.chainId, input.escrowAddress),
     types: evidenceReceiptTypes,
     primaryType: "EvidenceReceipt",

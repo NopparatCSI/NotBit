@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { splitPayment } from "@marketplace/shared";
 import type { OrderOverview } from "@/lib/orders/context";
-import type { AuditEntry, ChatMessage, TimelineEvent } from "@/lib/admin/queries";
+import type { AuditEntry, ConversationPage, TimelineEvent } from "@/lib/admin/queries";
 import type { EvidenceItem } from "@/lib/evidence/files";
 import { formatEth, formatTime, shortHex, timeLeft } from "@/lib/admin/format";
 import { MarketplaceIcon } from "@/components/marketplace-icon";
@@ -11,12 +11,13 @@ import { AdminEmpty, AdminPanel, OrderStatus } from "./ui";
 import { ActivityList } from "./history";
 import { EvidencePanel } from "./evidence-panel";
 import { DecisionForm, EscalateButton } from "./staff-actions";
+import { OrderConversation } from "./conversation";
 
 const events: Record<string, string> = { OrderFunded: "Deposit confirmed", DeliveryConfirmed: "Delivery confirmed", ReceiptConfirmed: "Receipt confirmed", OrderInReview: "Moved to review", DisputeResolved: "Staff decision confirmed", OrderReleased: "Paid to seller and platform", OrderRefunded: "Refunded to buyer" };
 const terms = [["title", "Item"], ["quantity", "Quantity"], ["gameSlug", "Game"], ["region", "Server / region"], ["buyerCharacter", "Buyer character"], ["sellerCharacter", "Seller character"], ["deliveryMethod", "Delivery method"], ["meetingTime", "Meeting time"]];
 
 export function OrderReviewContent({ order, staffWallet, timeline, chat, history, evidence, receiptLinks }: {
-  order: OrderOverview; staffWallet: string; timeline: TimelineEvent[]; chat: ChatMessage[]; history: AuditEntry[];
+  order: OrderOverview; staffWallet: string; timeline: TimelineEvent[]; chat: ConversationPage; history: AuditEntry[];
   evidence: (EvidenceItem & { createdText: string })[]; receiptLinks: Record<string, string>;
 }) {
   const split = splitPayment(order.amount_wei);
@@ -40,9 +41,7 @@ export function OrderReviewContent({ order, staffWallet, timeline, chat, history
         <details className="admin-metadata mt-5"><summary>Agreement hash</summary><p className="break-all font-mono">{order.agreement_hash ?? "Not recorded"}</p></details>
       </AdminPanel></section>
       <section id="chat"><AdminPanel title="Conversation" description="Read the messages in order. System messages are marked separately.">
-        {chat.length === 0 ? <AdminEmpty icon="file" title="No messages recorded" description="Messages from the buyer and seller will appear here when available." /> : <ol className="admin-chat-list" tabIndex={0} aria-label="Order conversation">
-          {chat.map(message => <li key={message.id} data-sender={message.from}><p className="text-xs font-semibold">{message.from === "SYSTEM" ? "NOTBIT system" : message.from === "BUYER" ? "Buyer" : "Seller"}<time className="ml-2 font-normal text-muted-foreground" dateTime={message.created_at}>{formatTime(message.created_at)}</time></p><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed">{message.body}</p></li>)}
-        </ol>}
+        <OrderConversation orderId={order.id} page={chat} />
       </AdminPanel></section>
       <section id="timeline"><AdminPanel title="Order timeline" description="Confirmed events recorded from the escrow contract.">
         {timeline.length === 0 ? <AdminEmpty icon="clock" title="No confirmed events yet" description="The order timeline updates after confirmed events are indexed." /> : <ol className="admin-timeline">{timeline.map(event => <li key={`${event.tx_hash}-${event.log_index}`}><p className="text-sm font-semibold">{events[event.event_name] ?? event.event_name}</p><p className="text-xs leading-relaxed text-muted-foreground">{formatTime(event.block_timestamp)}</p>{order.chain_id === 11155111 ? <a className="admin-inline-link" href={`https://sepolia.etherscan.io/tx/${event.tx_hash}`} target="_blank" rel="noreferrer">View transaction<MarketplaceIcon name="arrow" /></a> : <p className="break-all font-mono text-xs text-muted-foreground">{shortHex(event.tx_hash)}</p>}</li>)}</ol>}

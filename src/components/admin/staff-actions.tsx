@@ -9,6 +9,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { explainTxError, explorerUrl, sendEscrowTransaction, type TxUpdate } from "./staff-transaction";
+import { useStaffTransaction } from "./use-staff-transaction";
 
 const statusText: Record<TxUpdate["status"], string> = {
   AWAITING_SIGNATURE: "Waiting for MetaMask…",
@@ -16,6 +17,7 @@ const statusText: Record<TxUpdate["status"], string> = {
   CONFIRMING: "Waiting for 3 confirmations…",
   SUCCEEDED: "Confirmed on-chain. Refresh after the next status update to see the result.",
   FAILED: "Transaction failed",
+  UNKNOWN: "Transaction submitted. Verification is pending; do not resend.",
 };
 
 type ChainTarget = { chainId: number; escrowAddress: string; staffWallet: string };
@@ -27,11 +29,6 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   const result = (await response.json().catch(() => null)) as ApiResult<T> | null;
   if (!result || "error" in result) throw new Error(result?.error.message ?? "The server could not be reached.");
   return result.data;
-}
-
-async function recordActivity(body: Record<string, unknown>): Promise<void> {
-  // History is best effort here. The indexer still records the on-chain result.
-  await postJson("/api/v1/admin/activity", body).catch(() => undefined);
 }
 
 function TxStatusLine({ update, chainId }: { update: TxUpdate | null; chainId: number }) {
@@ -48,18 +45,11 @@ function TxStatusLine({ update, chainId }: { update: TxUpdate | null; chainId: n
   );
 }
 
-function useTransaction() {
-  const [update, setUpdate] = useState<TxUpdate | null>(null);
-  const [error, setError] = useState("");
-  const pending = update !== null && !["SUCCEEDED", "FAILED"].includes(update.status);
-  return { update, setUpdate, error, setError, pending };
-}
-
 export function DecisionForm({ orderId, chainId, escrowAddress, staffWallet, refundText, releaseText }: ChainTarget & {
   orderId: string; refundText: string; releaseText: string;
 }) {
   const router = useRouter();
-  const tx = useTransaction();
+  const tx = useStaffTransaction({ chainId, escrowAddress, staffWallet }, "DECISION_SUBMITTED", orderId);
   const [choice, setChoice] = useState<"refund" | "release" | "">("");
   const [reason, setReason] = useState("");
   const [preparing, setPreparing] = useState(false);
@@ -96,13 +86,13 @@ export function DecisionForm({ orderId, chainId, escrowAddress, staffWallet, ref
         chainId, escrowAddress: escrowAddress as Address, staffWallet,
         call: { functionName: "resolveDispute", args: [draft.chainOrderId, draft.refundBuyer, draft.decisionHash] },
         onUpdate: tx.setUpdate,
-        onSubmitted: (txHash) => recordActivity({ action: "DECISION_SUBMITTED", orderId, txHash }),
+        onSubmitted: tx.submitted,
       });
       router.refresh();
     } catch (error) {
       tx.setError(explainTxError(error));
       // Keep the hash visible if one was sent, so staff can check it before retrying.
-      tx.setUpdate((current) => (current?.hash ? { ...current, status: "FAILED" } : null));
+      tx.setUpdate((current) => (current?.hash ? { ...current, status: "UNKNOWN" } : null));
     }
   }
 
@@ -137,6 +127,7 @@ export function DecisionForm({ orderId, chainId, escrowAddress, staffWallet, ref
       <Button type="submit" disabled={busy}>{preparing ? "Saving decision…" : tx.pending ? "Waiting for confirmation…" : tx.update?.status === "SUCCEEDED" ? "Decision confirmed" : reviewing ? "Confirm in MetaMask" : "Review decision"}</Button>
       {!reviewing && <p className="text-xs leading-relaxed text-muted-foreground">You can review your choice before signing. Nothing is sent at this step.</p>}
       <TxStatusLine update={tx.update} chainId={chainId} />
+      {tx.warning && <p role="status" className="text-sm text-muted-foreground">{tx.warning}</p>}
     </form>
   );
 }
@@ -145,7 +136,7 @@ export function EscalateButton({ orderId, chainOrderId, chainId, escrowAddress, 
   orderId: string; chainOrderId: string;
 }) {
   const router = useRouter();
-  const tx = useTransaction();
+  const tx = useStaffTransaction({ chainId, escrowAddress, staffWallet }, "ESCALATION_SUBMITTED", orderId);
   async function escalate() {
     tx.setError("");
     try {
@@ -153,12 +144,12 @@ export function EscalateButton({ orderId, chainOrderId, chainId, escrowAddress, 
         chainId, escrowAddress: escrowAddress as Address, staffWallet,
         call: { functionName: "escalateExpiredOrder", args: [chainOrderId as Hex] },
         onUpdate: tx.setUpdate,
-        onSubmitted: (txHash) => recordActivity({ action: "ESCALATION_SUBMITTED", orderId, txHash }),
+        onSubmitted: tx.submitted,
       });
       router.refresh();
     } catch (error) {
       tx.setError(explainTxError(error));
-      tx.setUpdate(null);
+      tx.setUpdate(current => current?.hash ? { ...current, status: "UNKNOWN" } : null);
     }
   }
   return (
@@ -167,6 +158,7 @@ export function EscalateButton({ orderId, chainOrderId, chainId, escrowAddress, 
         Move to review
       </Button>
       <TxStatusLine update={tx.update} chainId={chainId} />
+      {tx.warning && <p role="status" className="text-sm text-muted-foreground">{tx.warning}</p>}
       {tx.error && <p role="alert" className="text-sm text-destructive">{tx.error}</p>}
     </div>
   );
@@ -174,7 +166,7 @@ export function EscalateButton({ orderId, chainOrderId, chainId, escrowAddress, 
 
 export function FundingPauseToggle({ paused, chainId, escrowAddress, staffWallet }: ChainTarget & { paused: boolean }) {
   const router = useRouter();
-  const tx = useTransaction();
+  const tx = useStaffTransaction({ chainId, escrowAddress, staffWallet }, "FUNDING_PAUSE_SUBMITTED", undefined, !paused);
   const [confirming, setConfirming] = useState(false);
   async function toggle() {
     tx.setError("");
@@ -184,15 +176,15 @@ export function FundingPauseToggle({ paused, chainId, escrowAddress, staffWallet
         chainId, escrowAddress: escrowAddress as Address, staffWallet,
         call: { functionName: "setFundingPaused", args: [!paused] },
         onUpdate: tx.setUpdate,
-        onSubmitted: (txHash) => recordActivity({ action: "FUNDING_PAUSE_SUBMITTED", paused: !paused, txHash }),
+        onSubmitted: tx.submitted,
       });
       router.refresh();
     } catch (error) {
       tx.setError(explainTxError(error));
-      tx.setUpdate(null);
+      tx.setUpdate(current => current?.hash ? { ...current, status: "UNKNOWN" } : null);
     }
   }
-  const busy = tx.pending || tx.update?.status === "SUCCEEDED";
+  const busy = tx.pending || (tx.update?.status === "SUCCEEDED" && paused !== tx.submittedPaused);
   return (
     <div className="flex flex-col items-start gap-3">
       {confirming ? (
@@ -213,6 +205,7 @@ export function FundingPauseToggle({ paused, chainId, escrowAddress, staffWallet
         </Button>
       )}
       <TxStatusLine update={tx.update} chainId={chainId} />
+      {tx.warning && <p role="status" className="text-sm text-muted-foreground">{tx.warning}</p>}
       {tx.error && <p role="alert" className="text-sm text-destructive">{tx.error}</p>}
     </div>
   );

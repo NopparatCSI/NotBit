@@ -1,6 +1,12 @@
 # ลำดับปิดงาน Developer 3
 
+ผลตรวจรับล่าสุด 19 พฤศจิกายน 2026: [ลำดับ 16–23](priority-16-23.md) ผ่าน acceptance รวม 25 checks และธุรกรรม Sepolia เดิมทั้งรับสินค้า/คืนเงิน/จ่ายเงิน รวมถึงข้อความสถานะในแชทที่เพิ่มจากผลทดสอบ รายงานระบุขอบเขต test wallet และ Cloud ไว้แยกชัดเจน
+
 ปรับสถานะวันที่ 18 พฤศจิกายน 2026 ตามขอบเขตรุ่น 5 วันใน `PlanDev.md`
+
+อัปเดตหลังรวม Dev 2 วันที่ 19 พฤศจิกายน 2026: ดู [ผลตรวจงานค้างทั้งทีม](team-completion-audit.md) สำหรับรายการปัจจุบัน รวมจุดเชื่อมรูปแชท/ยอดค้างรับ/การอัปโหลดบนโฮสต์จริง
+
+หลังทำรายการลำดับ 1–6: ตั้ง signer และ sender พร้อม gas แล้ว ติดตั้ง local Cron/Vault และทดสอบ HTTP 200; เพิ่ม image decode กับ direct Storage uploads ดู [ผลดำเนินการและวิธีเปิดใช้งาน](priority-1-6.md) งานตรวจรับซื้อขายบน Sepolia และ Cloud deployment ยังแยกต่างหาก
 
 ## 1. ฐานข้อมูลและสิทธิ์ — ทำแล้วในเครื่องนี้
 
@@ -26,43 +32,46 @@ npx supabase migration list --local
 
 เครื่องทีมที่ยังไม่ได้ใช้ migration Dev 3 ให้ใช้ไฟล์เวอร์ชันที่แก้ใน branch นี้ก่อน `npx supabase migration up --local` เครื่องที่ใช้ migration Dev 3 ไปแล้วให้ใช้ migration ใหม่ที่ค้างตามปกติ ไม่รัน migration เก่าซ้ำหรือ reset ข้อมูล
 
-## 2. เชื่อมสถานะจาก Contract เข้าฐานข้อมูล — ตั้งค่าและทดสอบแล้ว; ยังต้องตั้ง Cron
+## 2. เชื่อมสถานะจาก Contract เข้าฐานข้อมูล — ตั้งค่าและติดตั้ง Cron ใน local แล้ว
 
 - [x] ตรวจ chain ID, ที่อยู่ Contract และบล็อกติดตั้งผ่าน RPC ให้ตรงกับ `docs/handoff.md`
 - [x] ตั้ง `ESCROW_START_BLOCK` และ secret สุ่มของ endpoint ใน `.env` ที่ไม่ถูก commit
 - [x] แก้ indexer ให้ลดช่วงอ่านตามข้อจำกัด RPC ของโปรเจกต์ (10 บล็อกต่อคำขอ)
 - [x] เรียก endpoint จริงและตรวจว่า checkpoint เขียนลง Supabase สำเร็จ
 - [x] อ่านย้อนหลังจากบล็อกติดตั้งจนถึง confirmed head ณ เวลาตรวจ: checkpoint `12162278` ตรงกับ head `12162278`
-- [ ] ติดตั้ง scheduler เรียก `/api/v1/internal/indexer` ทุกหนึ่งนาที พร้อม `Authorization: Bearer <INDEXER_SECRET>`
-- [ ] ตั้ง `INDEXER_SENDER_PRIVATE_KEY` เป็นบัญชีเฉพาะที่มี Sepolia gas หากต้องการยกระดับออเดอร์หมดเวลาอัตโนมัติ
+- [x] ติดตั้ง local scheduler เรียก `/api/v1/internal/indexer` ทุกหนึ่งนาที โดยเก็บ URL/token ใน Vault และตรวจ HTTP 200 จริง
+- [x] ตั้ง `INDEXER_SENDER_PRIVATE_KEY` เป็นบัญชีเฉพาะและเติม 0.001 Sepolia ETH ยืนยันครบ 3 confirmations
 - [ ] ทดสอบ job หลัง RPC ขัดข้องและหลังบริการ restart
 
-การอ่าน events ใช้เฉพาะข้อมูลที่ครบ 3 confirmations และเขียน projection/checkpoint ใน transaction เดียว การดึงข้อมูลย้อนหลังที่ทำในรอบนี้ไม่มีการส่งธุรกรรม เนื่องจากไม่มี sender key
+การอ่าน events ใช้เฉพาะข้อมูลที่ครบ 3 confirmations และเขียน projection/checkpoint ใน transaction เดียว รอบ backfill เดิมไม่มี sender key; รอบลำดับ 1–6 ตั้ง key และเติม gas แล้ว แต่ยังไม่ได้ทดสอบ escalation ของออเดอร์จริงเพราะคิว local ว่าง
 
 ระหว่าง backfill พบ RPC จำกัดอัตรา (`Too Many Requests`) จึงเว้นช่วงแล้วอ่านต่อจาก checkpoint เดิมจนทัน การรัน Cron ควรมีการติดตาม 503/429 และ retry ในรอบถัดไป ปัจจุบันคิวใน local ยังว่าง ไม่มีการเติมออเดอร์ปลอมเพื่อให้หน้าเว็บมีรายการ
 
-## 3. เปิดใช้ใบรับหลักฐาน — ยังต้องใช้ key ของทีม
+## 3. เปิดใช้ใบรับหลักฐาน — ตั้ง signer แล้ว; รอทดสอบการซื้อขายจริง
 
-- [ ] ตั้ง `EVIDENCE_SIGNER_PRIVATE_KEY` ฝั่งเซิร์ฟเวอร์ให้ตรงกับ signer ที่ Contract เดิมกำหนด
+- [x] ตั้ง `EVIDENCE_SIGNER_PRIVATE_KEY` ให้ตรงกับ Contract เดิม และทดสอบลงนาม/ตรวจ EIP-712 กลับสำเร็จ
 - [ ] ทดสอบอัปโหลดจากผู้ขาย/ผู้ซื้อ → ใบรับ EIP-712 → confirmDelivery/confirmReceipt ผ่าน MetaMask
 - [ ] ทดสอบกรณี signer ผิด ไม่ได้ตั้ง key และเซ็นไม่สำเร็จ โดยไม่ทำให้ผู้ใช้เข้าใจว่ายืนยันสำเร็จ
 
 อย่าสร้าง key ใหม่มาใช้แทน signer เดิม เพราะ Contract รุ่นนี้กำหนด signer ตอนติดตั้ง ใช้ `.env.example` เป็นรายการค่า และเก็บ private key ใน `.env.local` หรือ server environment
 
-## 4. ทำให้ประวัติผู้ดูแลกู้คืนได้ — ยังต้องแก้
+## 4. ทำให้ประวัติผู้ดูแลกู้คืนได้ — เพิ่ม implementation และ tests แล้ว; รอ E2E รวม
 
-- [ ] แก้ `recordActivity()` ที่กลืนข้อผิดพลาดจนประวัติ transaction อาจหาย
-- [ ] เพิ่ม retry หรือ reconciliation ด้วย transaction เดิมและ confirmed chain events
-- [ ] แยกส่งแล้ว/ยืนยันแล้ว/ล้มเหลว และป้องกันบันทึกซ้ำ
+- [x] แทน best-effort `recordActivity()` ด้วยการตรวจ tx จริง บันทึกแบบ idempotent และแจ้ง retry แทนกลืนข้อผิดพลาด
+- [x] เพิ่ม retry/hash recovery หลัง reload และ reconciliation จาก confirmed events พร้อมรักษาประวัติ reorg
+- [x] แยกส่งแล้ว/ยืนยันแล้ว/ล้มเหลว/UNKNOWN และ atomic failed-tx audit; tests ตรวจ rollback และการบันทึกซ้ำ
+- [ ] ตรวจรับด้วย MetaMask/หลายบทบาทจริงครบเส้นทางบน environment รวม ดู [ผลข้อ 7–15](priority-7-15.md)
 
-## 5. เชื่อมหน้าซื้อขายของ Dev 2 — งานร่วมที่ยังต้องทำ
+## 5. เชื่อมหน้าซื้อขายของ Dev 2 — มีโค้ดเชื่อมแล้ว; รอตรวจรับจริง
 
-- [ ] เชื่อมฟอร์มอัปโหลด delivery/receipt/dispute กับ API ของ Dev 3
-- [ ] เชื่อมเหตุผลข้อพิพาท → openDispute → คิว Admin
-- [ ] หลังคำตัดสิน/ยกระดับ ยืนยันแล้วให้หน้าเว็บรับสถานะใหม่จาก projection
+- [x] มีโค้ดเชื่อมฟอร์มอัปโหลด delivery/receipt/dispute กับ API ของ Dev 3
+- [x] มีโค้ดเชื่อมเหตุผลข้อพิพาท → openDispute → indexer → คิว Admin
+- [x] หน้าคู่ค้า polling สถานะจาก Contract หลัง confirmations ผ่าน API orders
+- [x] เปิด local scheduler, เพิ่ม projectionReady และ browser fixture ตรวจช่วงรอ; หน้า Admin auto refresh ทุก 15 วินาที
+- [x] เชื่อมรูปแชทของ Dev 2 ให้ผู้ดูแลดูได้พร้อม audit และ pagination แบบ cursor
 - [ ] ทดสอบ refund เต็มจำนวน และ release ผู้ขาย/แพลตฟอร์มครบเส้นทาง
 
-API ของ Dev 3 เชื่อมฐานข้อมูลแล้ว แต่การมี API ไม่ได้แปลว่าหน้าซื้อขายของ Dev 2 เชื่อมครบ
+หลังรวม `bitka` ใน `codex/integrate-dev2` และแก้ข้อ 1–15 มี UI/API/Contract เชื่อมกันและตั้ง signer แล้ว การติ๊กว่ามีโค้ดข้างต้นยังไม่แทนการตรวจรับด้วย MetaMask/Sepolia จริงครบเส้นทาง
 
 ## 6. เพิ่มการทดสอบและตรวจรับ — ทำบางส่วนแล้ว
 

@@ -1,14 +1,18 @@
 import { keccak256, type Address, type Hex } from "viem";
+import { z } from "zod";
+import { readJson } from "@/lib/api/body";
+import { takeStagedImage } from "@/lib/uploads/staging";
 import { evidenceStages, hashEvidence, type EvidenceReceipt } from "@marketplace/shared";
 import { ApiError, handle, ok } from "@/lib/api/response";
 import { requireTradeUser } from "@/lib/auth/viewer";
 import { getEscrowConfig, matchesEscrow } from "@/lib/chain/config";
 import { createChainEscrowReader } from "@/lib/chain/escrow-reader";
 import {
-  checkEvidenceFile, dbStage, extensionFor, maxFilesPerUpload, parseStage, uploadRateLimit, uploadRule,
+  dbStage, extensionFor, maxFilesPerUpload, parseStage, uploadRateLimit, uploadRule,
   type EvidenceItem, type EvidenceStageName, type ImageType,
 } from "@/lib/evidence/files";
-import { signEvidenceReceipt } from "@/lib/evidence/signer";
+import { checkDecodedEvidenceFile } from "@/lib/evidence/validate-image";
+import { requireEvidenceSigner, signEvidenceReceipt } from "@/lib/evidence/signer";
 import { loadOrder, partyOf, requireOrderAccess, requireService, type OrderOverview } from "@/lib/orders/context";
 
 export const runtime = "nodejs";
@@ -71,10 +75,15 @@ export function POST(request: Request, { params }: Params) {
     if (!party) throw new ApiError(404, "NOT_FOUND", "Order not found.");
 
     let form: FormData;
+    let ticketIds: string[] | null = null;
     try {
-      form = await request.formData();
+      if (request.headers.get("content-type")?.includes("application/json")) {
+        const input = await readJson(request, z.object({ stage: z.enum(["delivery", "receipt", "dispute"]), ticketIds: z.array(z.uuid()).min(1).max(maxFilesPerUpload).refine(ids => new Set(ids).size === ids.length) }));
+        ticketIds = input.ticketIds;
+        form = new FormData(); form.set("stage", input.stage);
+      } else form = await request.formData();
     } catch {
-      throw new ApiError(400, "INVALID_INPUT", "Send evidence as multipart form data.");
+      throw new ApiError(400, "INVALID_INPUT", "Send an evidence stage and valid image upload tickets.");
     }
     const stage = parseStage(form.get("stage"));
     if (!stage) throw new ApiError(400, "INVALID_INPUT", "Choose an evidence stage: delivery, receipt, or dispute.");
@@ -91,25 +100,18 @@ export function POST(request: Request, { params }: Params) {
       throw new ApiError(409, "CONFLICT", "The deadline for this step has passed. The order will go to staff review.");
     }
 
-    const files = form.getAll("files").filter((value): value is File => value instanceof File);
+    const files = ticketIds ? await Promise.all(ticketIds.map(ticket => takeStagedImage(ticket, viewer.id, "evidence", order.id)))
+      : form.getAll("files").filter((value): value is File => value instanceof File);
     if (files.length === 0) throw new ApiError(400, "INVALID_INPUT", "Attach at least one image.");
     if (files.length > maxFilesPerUpload) {
       throw new ApiError(400, "INVALID_INPUT", `Attach up to ${maxFilesPerUpload} images at a time.`);
     }
 
     const supabase = requireService();
-    const since = new Date(Date.now() - uploadRateLimit.windowMinutes * 60_000).toISOString();
-    const recent = await supabase.from("evidence").select("id", { count: "exact", head: true })
-      .eq("submitted_by", viewer.id).gte("created_at", since);
-    if (recent.error) throw new ApiError(503, "UNAVAILABLE", "Could not check upload limits. Try again.");
-    if ((recent.count ?? 0) + files.length > uploadRateLimit.files) {
-      throw new ApiError(429, "UNAVAILABLE", `Upload limit reached. Try again in ${uploadRateLimit.windowMinutes} minutes.`);
-    }
-
     const prepared: { id: string; bytes: Uint8Array; type: ImageType; hash: Hex; path: string }[] = [];
     for (const file of files) {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const check = checkEvidenceFile(file.name || "Image", file.type, bytes);
+      const check = await checkDecodedEvidenceFile(file.name || "Image", file.type, bytes);
       if (!check.ok) throw new ApiError(400, "INVALID_INPUT", check.message);
       const evidenceId = crypto.randomUUID();
       prepared.push({
@@ -119,7 +121,11 @@ export function POST(request: Request, { params }: Params) {
       });
     }
 
-    if (stage !== "dispute") await checkChainState(order, stage);
+    const signer = stage === "dispute" ? null : requireEvidenceSigner(order.chain_id);
+    if (signer) await checkChainState(order, stage);
+    const reservation = await supabase.rpc("reserve_evidence_quota", { p_user: viewer.id, p_count: files.length });
+    if (reservation.error?.code === "P0001") throw new ApiError(429, "UNAVAILABLE", `Upload limit reached. Try again in ${uploadRateLimit.windowMinutes} minutes.`);
+    if (reservation.error || !reservation.data) throw new ApiError(503, "UNAVAILABLE", "Could not reserve the evidence upload quota.");
 
     const uploaded: string[] = [];
     try {
@@ -133,12 +139,13 @@ export function POST(request: Request, { params }: Params) {
       const { data: rows, error } = await supabase.from("evidence").insert(prepared.map((file) => ({
         id: file.id, order_id: order.id, submitted_by: viewer.id, stage: dbStage[stage], object_path: file.path,
         file_hash: file.hash, content_type: file.type, size_bytes: file.bytes.length,
+        upload_reservation_id: reservation.data,
       }))).select("id, stage, submitted_by, file_hash, content_type, size_bytes, created_at");
       if (error) throw new ApiError(503, "UNAVAILABLE", "Could not record the evidence. Try again.");
 
       let receipt: EvidenceReceipt | null = null;
-      if (stage !== "dispute") {
-        receipt = await signEvidenceReceipt({
+      if (stage !== "dispute" && signer) {
+        receipt = await signEvidenceReceipt(signer, {
           chainId: order.chain_id,
           escrowAddress: order.escrow_address as Address,
           orderId: order.chain_order_id,
@@ -162,8 +169,9 @@ export function POST(request: Request, { params }: Params) {
       // Rows may already reference the files, so only clean up when nothing was recorded.
       const recorded = await supabase.from("evidence").select("id", { count: "exact", head: true })
         .in("id", prepared.map((file) => file.id));
-      if (!recorded.error && recorded.count === 0 && uploaded.length) {
-        await supabase.storage.from(bucket).remove(uploaded);
+      if (!recorded.error && recorded.count === 0) {
+        if (uploaded.length) await supabase.storage.from(bucket).remove(uploaded);
+        await supabase.from("evidence_upload_reservations").delete().eq("id", reservation.data);
       }
       throw error;
     }

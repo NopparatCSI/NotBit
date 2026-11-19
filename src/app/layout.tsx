@@ -27,18 +27,19 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-10 focus:rounded-lg focus:bg-primary focus:p-3 focus:text-primary-foreground">Skip to content</a>
         <header className="site-header">
           <nav aria-label="Main navigation" className="page-width site-nav">
-            <div className="flex items-center gap-7">
+            <div className="flex items-center gap-2 sm:gap-7">
               <Link className="site-brand" href="/" aria-label="NOTBIT home">
                 <MarketplaceIcon name="notbit" />
                 <span>NOTBIT</span>
               </Link>
               <Link className="header-discover hidden sm:inline-flex" href="/#marketplace">Item Store</Link>
+              <Button asChild variant="quiet" size="compact"><Link href="/sell">Sell</Link></Button>
             </div>
             <div className="flex items-center gap-1 sm:gap-3">
               <p className="testnet-label"><span className="hidden sm:inline">Sepolia </span>testnet<span className="sr-only sm:not-sr-only"> · No real funds</span></p>
               <ThemeToggle storageKey={themeStorageKey} />
               <Button asChild variant="quiet" size="compact"><Link href="/account">
-                <MarketplaceIcon name="wallet" data-icon="inline-start" />
+                <MarketplaceIcon name="wallet" className="hidden sm:block" data-icon="inline-start" />
                 Wallet
               </Link></Button>
             </div>
