@@ -8,6 +8,10 @@ Supabase Cron เรียก `marketplace_private.invoke_indexer()` ทุก�
 
 Preview ที่มี Vercel Authentication ต้องให้ Cron ผ่านช่องทาง automation ที่ได้รับอนุญาต การส่ง `INDEXER_SECRET` อย่างเดียวผ่านหน้าป้องกันของ Vercel ไม่ได้ และไม่ควรปิด Deployment Protection เพื่อให้ทดสอบผ่าน
 
+ใช้ Automation Bypass เฉพาะ project `nopparatcsis-projects/notbit` หลังได้รับอนุมัติ เก็บใน Vault ชื่อ `notbit_vercel_bypass` พร้อม `notbit_vercel_origin` ซึ่งต้องเป็น origin ของ Preview ที่ทดสอบ เช่น `https://<deployment>.vercel.app` ตั้ง `notbit_indexer_url` เป็น origin เดียวกันต่อด้วย `/api/v1/internal/indexer` ฟังก์ชันปฏิเสธ origin ที่ไม่ตรงก่อนส่ง credential และยังต้องตรวจ `INDEXER_SECRET` ที่แอปตามเดิม ห้ามใส่ token ใน query string, log หรือเอกสารนี้
+
+หากเปลี่ยน deployment ให้ปรับทั้ง origin และ URL พร้อมกันใน transaction เดียว ตรวจ HTTP 200 และ checkpoint หลังปรับ ค่า bypass ใช้ได้เฉพาะโปรเจกต์ที่ออกให้ เก็บในไฟล์ local ที่ Git ignore สำหรับการทดสอบด้วย browser และถอนสิทธิ์ใน Settings → Deployment Protection → Protection Bypass for Automation เมื่อเลิกใช้ Preview
+
 ## ลำดับกู้เหตุขัดข้อง
 
 1. ยืนยัน chain ID, Contract, start block, deployment tx, Supabase project และบทบาทจาก environment ของ deployment นั้น ตรวจด้วย `npm run release:check` สำหรับไฟล์ `.env.preview.local`

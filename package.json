@@ -8,7 +8,7 @@
     "packages/shared"
   ],
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.13.0 <23"
   },
   "scripts": {
     "dev": "next dev --webpack --hostname 127.0.0.1",
@@ -23,6 +23,7 @@
     "acceptance:app": "node scripts/acceptance/app-server.mjs",
     "test:acceptance": "vitest run --config vitest.acceptance.config.ts",
     "test:sepolia": "vitest run --config vitest.sepolia.config.ts",
+    "test:preview": "vitest run --config vitest.preview.config.ts",
     "release:check": "node scripts/release/check.mjs",
     "release:deploy:prepare": "node scripts/release/deploy-online.mjs",
     "release:verify": "node scripts/release/verify-contract.mjs",
