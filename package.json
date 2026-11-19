@@ -27,6 +27,7 @@
     "release:check": "node scripts/release/check.mjs",
     "release:deploy:prepare": "node scripts/release/deploy-online.mjs",
     "release:verify": "node scripts/release/verify-contract.mjs",
+    "release:smoke": "node scripts/release/preview-smoke.mjs",
     "env:check": "node --experimental-strip-types scripts/check-environment.mjs",
     "indexer:bridge": "node scripts/local-indexer-bridge.mjs",
     "indexer:configure:local": "node scripts/configure-local-indexer.mjs",
