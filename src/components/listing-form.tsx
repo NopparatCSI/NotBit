@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, useTransition, type FormEvent } from "reac
 import { formatEther, parseEther } from "viem";
 import type { ApiResult } from "@marketplace/shared";
 import { Button } from "@/components/ui/button";
+import { uploadStagedImage } from "@/lib/uploads/client";
 import { createListingSchema, listingImageMaxBytes, listingImageTypes, type Listing, type ListingChanges } from "@/lib/listings/model";
 
 const fieldClass = "min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2";
@@ -35,14 +36,9 @@ export function ListingForm({ games, listing }: {
     setMessage("");
     setSaving(true);
     try {
-      let body: FormData | string = JSON.stringify(changes);
-      const headers: Record<string, string> = {};
-      if (selectedImage) {
-        const multipart = new FormData();
-        multipart.set("data", JSON.stringify(changes));
-        multipart.set("image", selectedImage);
-        body = multipart;
-      } else headers["Content-Type"] = "application/json";
+      const imageTicketId = selectedImage ? await uploadStagedImage(selectedImage, "listing", listing?.id) : undefined;
+      const body = JSON.stringify({ ...changes, imageTicketId });
+      const headers = { "Content-Type": "application/json" };
       const response = await fetch(listing ? `/api/v1/listings/${listing.id}` : "/api/v1/listings", {
         method: listing ? "PATCH" : "POST",
         headers, body,

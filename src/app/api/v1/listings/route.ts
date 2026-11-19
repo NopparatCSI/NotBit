@@ -17,7 +17,7 @@ export function GET(request: Request) {
 export function POST(request: Request) {
   return listingResponse(async () => {
     const seller = await requireTradeUser();
-    const { input, image } = await readListingSubmission(request, createListingSchema);
+    const { input, image } = await readListingSubmission(request, createListingSchema, seller.id);
     return createListing(seller.id, input, image);
   }, 201);
 }

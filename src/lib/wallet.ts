@@ -45,6 +45,8 @@ export function walletErrorMessage(error: unknown) {
       Unauthorized: "Use the wallet authorized for this order action.",
       InvalidReceipt: "The evidence receipt does not match this action.",
       InvalidOrderState: "The order state has changed. Refresh the order before trying again.",
+      NoPendingPayout: "This wallet has no queued payment to withdraw.",
+      PayoutFailed: "The withdrawal could not be delivered. The queued balance remains available.",
     };
     return messages[revert.data?.errorName ?? ""] ?? "The contract rejected this action. Refresh the order and check its status.";
   }

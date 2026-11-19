@@ -3,7 +3,7 @@ import { bytes32Schema } from "@marketplace/shared";
 import { readJson } from "@/lib/api/body";
 import { ApiError, handle, ok } from "@/lib/api/response";
 import { requireStaff } from "@/lib/auth/viewer";
-import { loadOrder, writeAudit } from "@/lib/orders/context";
+import { recordStaffTransaction } from "@/lib/admin/transactions";
 
 const bodySchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("DECISION_SUBMITTED"), orderId: z.uuid(), txHash: bytes32Schema }),
@@ -19,11 +19,10 @@ export function POST(request: Request) {
     const body = await readJson(request, bodySchema);
     if (body.action === "FUNDING_PAUSE_SUBMITTED") {
       if (staff.role !== "SUPER_ADMIN") throw new ApiError(403, "FORBIDDEN", "Only the Super Admin can pause deposits.");
-      await writeAudit(staff, null, body.action, { paused: body.paused, txHash: body.txHash });
+      await recordStaffTransaction(staff, body);
       return ok({ recorded: true }, 201);
     }
-    const order = await loadOrder(body.orderId);
-    await writeAudit(staff, order.id, body.action, { txHash: body.txHash });
+    await recordStaffTransaction(staff, body);
     return ok({ recorded: true }, 201);
   });
 }

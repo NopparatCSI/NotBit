@@ -25,7 +25,7 @@ export function PATCH(request: Request, { params }: ListingRoute) {
   return listingResponse(async () => {
     const seller = await requireTradeUser();
     const id = requireListingId((await params).id);
-    const { input, image } = await readListingSubmission(request, updateListingSchema);
+    const { input, image } = await readListingSubmission(request, updateListingSchema, seller.id, id);
     return updateListing(seller.id, id, input, image);
   });
 }

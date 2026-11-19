@@ -1,5 +1,5 @@
 import { requireTradeUser } from "@/lib/auth/viewer";
-import { conversationIdSchema, sendMessageSchema } from "@/lib/trade/model";
+import { conversationIdSchema, sendMessageSchema, stagedImageMessageSchema } from "@/lib/trade/model";
 import { sendImageMessage } from "@/lib/trade/images";
 import { ChatError, chatResponse, listMessages, readChatInput, requireConversation, sendMessage } from "@/lib/trade/server";
 
@@ -30,7 +30,8 @@ export function POST(request: Request, route: MessageRoute) {
     if (request.headers.get("content-type")?.split(";")[0].trim().toLowerCase() === "multipart/form-data") {
       return sendImageMessage(request, id, viewer.id);
     }
-    const input = await readChatInput(request, sendMessageSchema, "Enter a message between 1 and 4,000 characters.");
+    const input = await readChatInput(request, stagedImageMessageSchema.or(sendMessageSchema), "Enter a message or a valid uploaded image.");
+    if ("imageTicketId" in input) return sendImageMessage(request, id, viewer.id, input);
     return sendMessage(id, viewer.id, input.body, input.id);
   }, 201);
 }

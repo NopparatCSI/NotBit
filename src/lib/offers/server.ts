@@ -1,7 +1,8 @@
 import "server-only";
-import { createPublicClient, encodeFunctionData, http, parseEventLogs, verifyTypedData, type Address, type Hex } from "viem";
-import { hardhat, sepolia } from "viem/chains";
-import { escrowAbi, offerLifetime, orderStatuses, requiredConfirmations, walletSchema } from "@marketplace/shared";
+import { encodeFunctionData, parseEventLogs, verifyTypedData, type Address, type Hex } from "viem";
+import { escrowAbi, offerLifetime, orderStatuses, requiredConfirmations } from "@marketplace/shared";
+import { getCheckedEscrowClient, getEscrowConfig } from "@/lib/chain/config";
+import { projectionMatches } from "@/lib/orders/projection";
 import type { Viewer } from "@marketplace/shared";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { createServiceSupabase } from "@/lib/supabase/service";
@@ -29,18 +30,17 @@ type OfferRow = {
 };
 
 function configuration() {
-  const environment = process.env;
-  const chainId = Number(environment.ESCROW_CHAIN_ID ?? "11155111");
-  const address = walletSchema.safeParse(environment.ESCROW_ADDRESS || environment.NEXT_PUBLIC_ESCROW_ADDRESS);
-  if ((chainId !== 11155111 && chainId !== 31337) || !address.success) {
+  const config = getEscrowConfig();
+  if (!config) {
     throw new ChatError(503, "UNAVAILABLE", "Escrow is not configured for this marketplace.");
   }
-  return { chainId, escrowAddress: address.data } as Pick<OfferContext, "chainId" | "escrowAddress">;
+  return { chainId: config.chainId, escrowAddress: config.escrowAddress };
 }
 
-export function escrowClient(chainId: Offer["chainId"]) {
-  const rpc = chainId === 31337 ? process.env.ESCROW_RPC_URL ?? "http://127.0.0.1:8545" : process.env.SEPOLIA_RPC_URL;
-  return createPublicClient({ chain: chainId === 31337 ? hardhat : sepolia, transport: http(rpc, { timeout: 15000, retryCount: 1 }) });
+export async function escrowClient(chainId: Offer["chainId"]) {
+  const config = getEscrowConfig();
+  if (!config || config.chainId !== chainId) throw new ChatError(503, "UNAVAILABLE", "This order belongs to a different escrow environment.");
+  return getCheckedEscrowClient(config);
 }
 
 async function requireDatabase() {
@@ -147,7 +147,7 @@ export async function requireOffer(id: string, viewer: Viewer) {
 
 export async function recordFunding(offer: Offer, viewer: Viewer, hash: Hex) {
   if (viewer.wallet !== offer.signedOffer.buyer) throw new ChatError(403, "FORBIDDEN", "Only the buyer can deposit for this offer.");
-  const client = escrowClient(offer.chainId);
+  const client = await escrowClient(offer.chainId);
   let transaction;
   try { transaction = await client.getTransaction({ hash }); }
   catch { throw new ChatError(503, "UNAVAILABLE", "The transaction is not available yet. Retry checking its status."); }
@@ -167,7 +167,7 @@ export async function readFunding(offer: Offer): Promise<OrderFunding> {
   const attempts = await db.from("funding_attempts").select("tx_hash").eq("offer_id", offer.id)
     .order("id", { ascending: false }).limit(10);
   checkError(attempts.error);
-  const client = escrowClient(offer.chainId);
+  const client = await escrowClient(offer.chainId);
   try {
     const tip = await client.getBlockNumber({ cacheTime: 0 });
     const confirmedAt = tip >= BigInt(requiredConfirmations - 1) ? tip - BigInt(requiredConfirmations - 1) : 0n;
@@ -176,7 +176,10 @@ export async function readFunding(offer: Offer): Promise<OrderFunding> {
     if (order.status > 0 && order.buyer.toLowerCase() === offer.signedOffer.buyer &&
         order.seller.toLowerCase() === offer.signedOffer.seller && order.amount === BigInt(offer.signedOffer.amount) &&
         order.agreementHash === offer.signedOffer.agreementHash && order.listingId === offer.signedOffer.listingId) {
-      return { status: "CONFIRMED", confirmations: requiredConfirmations, hash: null,
+      const projection = await db.from("orders").select("on_chain,status,chain_order_id,deadline")
+        .eq("id", offer.id).eq("chain_id", offer.chainId).eq("escrow_address", offer.escrowAddress).maybeSingle();
+      const projectionReady = !projection.error && projectionMatches(projection.data, { status: orderStatuses[order.status], orderId: offer.signedOffer.orderId, deadline: Number(order.deadline) });
+      return { status: "CONFIRMED", confirmations: requiredConfirmations, hash: null, projectionReady,
         orderStatus: orderStatuses[order.status], deadline: Number(order.deadline) };
     }
     for (const { tx_hash } of attempts.data ?? []) {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { WalletAccount } from "@/components/wallet-account";
+import { PendingPayout } from "@/components/pending-payout";
 import { Button } from "@/components/ui/button";
 import { requireViewer, ViewerError } from "@/lib/auth/viewer";
 import { getSupabaseConfig } from "@/lib/supabase/config";
@@ -37,6 +38,7 @@ export default async function Account({ searchParams }: { searchParams: Promise<
           </nav>
         )}
       </WalletAccount>
+      {viewer && <PendingPayout key={viewer.wallet} wallet={viewer.wallet} />}
     </div>
   );
 }

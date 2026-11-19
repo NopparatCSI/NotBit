@@ -1,7 +1,7 @@
 import "server-only";
 import type { Hex } from "viem";
 import { escrowAbi, orderStatuses, type EscrowReader, type OrderSnapshot } from "@marketplace/shared";
-import { createEscrowClient, type EscrowConfig } from "./config";
+import { getCheckedEscrowClient, type EscrowConfig } from "./config";
 
 export type ChainOrder = OrderSnapshot & {
   deliveryHash: Hex;
@@ -14,8 +14,8 @@ export type ChainOrder = OrderSnapshot & {
 export function createChainEscrowReader(config: EscrowConfig): EscrowReader & {
   getChainOrder(orderId: Hex): Promise<ChainOrder | null>;
 } {
-  const client = createEscrowClient(config);
   async function getChainOrder(orderId: Hex): Promise<ChainOrder | null> {
+    const client = await getCheckedEscrowClient(config);
     const order = await client.readContract({
       address: config.escrowAddress, abi: escrowAbi, functionName: "getOrder", args: [orderId],
     });
@@ -38,6 +38,7 @@ export function createChainEscrowReader(config: EscrowConfig): EscrowReader & {
     getChainOrder,
     getOrder: getChainOrder,
     async isFundingPaused() {
+      const client = await getCheckedEscrowClient(config);
       return client.readContract({ address: config.escrowAddress, abi: escrowAbi, functionName: "fundingPaused" });
     },
   };

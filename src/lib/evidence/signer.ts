@@ -15,7 +15,7 @@ function signerAccount() {
 export function requireEvidenceSigner(chainId: number) {
   const account = signerAccount();
   const expectedAddress = process.env.SEPOLIA_EVIDENCE_SIGNER_ADDRESS;
-  if (chainId === chainIds.sepolia && expectedAddress) {
+  if (chainId === chainIds.sepolia) {
     const expected = walletSchema.safeParse(expectedAddress);
     if (!expected.success || !isAddressEqual(account.address, expected.data)) {
       throw new ApiError(503, "UNAVAILABLE", "The evidence signer does not match the configured Sepolia escrow signer.");

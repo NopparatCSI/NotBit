@@ -1,6 +1,8 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
-import { checkEvidenceFile, extensionFor } from "@/lib/evidence/files";
+import { extensionFor } from "@/lib/evidence/files";
+import { checkDecodedEvidenceFile } from "@/lib/evidence/validate-image";
+import { takeStagedImage } from "@/lib/uploads/staging";
 import { getServiceSupabase } from "@/lib/supabase/services";
 import { maxChatImageBytes, sendImageMessageSchema } from "./model";
 import { ChatError, checkError, messageColumns, requireDatabase, toMessage } from "./server";
@@ -11,17 +13,17 @@ function imageService() {
   return { supabase, images: supabase.storage.from("chat-images") };
 }
 
-export async function sendImageMessage(request: Request, conversationId: string, senderId: string) {
-  const form = await request.formData().catch(() => null);
-  const parsed = sendImageMessageSchema.safeParse({ id: form?.get("id"), body: form?.get("body") ?? "" });
-  const files = form?.getAll("image") ?? [];
+export async function sendImageMessage(request: Request, conversationId: string, senderId: string, staged?: { id: string; body: string; imageTicketId: string }) {
+  const form = staged ? null : await request.formData().catch(() => null);
+  const parsed = sendImageMessageSchema.safeParse({ id: staged?.id ?? form?.get("id"), body: staged?.body ?? form?.get("body") ?? "" });
+  const files = staged ? [await takeStagedImage(staged.imageTicketId, senderId, "chat", conversationId)] : form?.getAll("image") ?? [];
   const image = files[0];
   if (!parsed.success || files.length !== 1 || !(image instanceof File)) {
     throw new ChatError(400, "INVALID_INPUT", "Attach one image with a caption of up to 4,000 characters.");
   }
   if (image.size > maxChatImageBytes) throw new ChatError(400, "INVALID_INPUT", "Choose an image up to 3 MB.");
   const bytes = Buffer.from(await image.arrayBuffer());
-  const checked = checkEvidenceFile("Image", image.type, bytes);
+  const checked = await checkDecodedEvidenceFile("Image", image.type, bytes);
   if (!checked.ok) throw new ChatError(400, "INVALID_INPUT", checked.message);
 
   const id = parsed.data.id.toLowerCase();

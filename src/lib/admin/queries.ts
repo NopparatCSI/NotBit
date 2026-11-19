@@ -1,8 +1,8 @@
 import "server-only";
-import { escrowAbi, type Viewer } from "@marketplace/shared";
-import { createEscrowClient, getEscrowConfig } from "@/lib/chain/config";
-import { createChainEscrowReader } from "@/lib/chain/escrow-reader";
+import { escrowAbi, requiredConfirmations, type Viewer } from "@marketplace/shared";
+import { getCheckedEscrowClient, getEscrowConfig } from "@/lib/chain/config";
 import { requireService, type OrderOverview } from "@/lib/orders/context";
+import { ApiError } from "@/lib/api/response";
 
 export async function listReviewQueue() {
   const supabase = requireService();
@@ -50,17 +50,27 @@ export async function getOrderTimeline(order: OrderOverview) {
   return data as TimelineEvent[];
 }
 
-export type ChatMessage = { id: string; from: "BUYER" | "SELLER" | "SYSTEM"; body: string; created_at: string };
+export type ChatMessage = { id: string; from: "BUYER" | "SELLER" | "SYSTEM"; body: string; created_at: string; hasImage: boolean };
 
-export async function getConversation(order: OrderOverview): Promise<ChatMessage[]> {
-  const { data, error } = await requireService().from("messages")
-    .select("id, sender_id, kind, body, created_at").eq("conversation_id", order.conversation_id)
-    .order("created_at").order("id").limit(500);
+export type ConversationPage = { messages: ChatMessage[]; nextBefore: string | null };
+export async function getConversation(order: OrderOverview, before?: string): Promise<ConversationPage> {
+  const db = requireService();
+  const query = db.from("messages")
+    .select("id, sender_id, kind, body, created_at, image_path").eq("conversation_id", order.conversation_id)
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(51);
+  if (before) {
+    const anchor = await db.from("messages").select("created_at").eq("conversation_id", order.conversation_id).eq("id", before).maybeSingle();
+    if (anchor.error) throw new Error("Could not read the conversation cursor.");
+    if (!anchor.data) throw new ApiError(404, "NOT_FOUND", "The message cursor was not found in this conversation.");
+    query.or(`created_at.lt.${anchor.data.created_at},and(created_at.eq.${anchor.data.created_at},id.lt.${before})`);
+  }
+  const { data, error } = await query;
   if (error) throw new Error("Could not load the conversation.");
-  return data.map((row) => ({
-    id: row.id, body: row.body, created_at: row.created_at,
+  const messages: ChatMessage[] = data.slice(0, 50).reverse().map((row) => ({
+    id: row.id, body: row.body, created_at: row.created_at, hasImage: Boolean(row.image_path),
     from: row.kind === "SYSTEM" ? "SYSTEM" : row.sender_id === order.buyer_id ? "BUYER" : "SELLER",
   }));
+  return { messages, nextBefore: data.length > 50 ? messages[0].id : null };
 }
 
 export async function getEvidenceReceipts(orderId: string) {
@@ -119,10 +129,11 @@ export async function getEscrowOverview() {
   let chain: { fundingPaused: boolean; admin: string; superAdmin: string } | null = null;
   if (config) {
     try {
-      const reader = createChainEscrowReader(config);
-      const client = createEscrowClient(config);
+      const client = await getCheckedEscrowClient(config);
+      const tip = await client.getBlockNumber({ cacheTime: 0 });
+      const blockNumber = tip >= BigInt(requiredConfirmations - 1) ? tip - BigInt(requiredConfirmations - 1) : 0n;
       const [fundingPaused, admin, superAdmin] = await Promise.all([
-        reader.isFundingPaused(),
+        client.readContract({ address: config.escrowAddress, abi: escrowAbi, functionName: "fundingPaused", blockNumber }),
         client.readContract({ address: config.escrowAddress, abi: escrowAbi, functionName: "admin" }),
         client.readContract({ address: config.escrowAddress, abi: escrowAbi, functionName: "superAdmin" }),
       ]);

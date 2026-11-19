@@ -1,4 +1,5 @@
 import "server-only";
+import { ApiError } from "@/lib/api/response";
 import type { ApiErrorCode, ApiResult } from "@marketplace/shared";
 import type { ZodType } from "zod";
 import { ViewerError } from "@/lib/auth/viewer";
@@ -174,7 +175,7 @@ export function listingResponse<T>(operation: () => Promise<T>, successStatus = 
       const code = error.status === 401 ? "UNAUTHENTICATED" : error.status === 403 ? "FORBIDDEN" : "UNAVAILABLE";
       return Response.json({ error: { code, message: error.message } }, { status: error.status, headers });
     }
-    if (!(error instanceof ListingError || error instanceof ChatError)) throw error;
+    if (!(error instanceof ListingError || error instanceof ChatError || error instanceof ApiError)) throw error;
     return Response.json({ error: { code: error.code, message: error.message } }, { status: error.status, headers });
   });
 }

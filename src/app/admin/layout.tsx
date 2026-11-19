@@ -5,6 +5,7 @@ import { getSupabaseConfig } from "@/lib/supabase/config";
 import { MarketplaceIcon } from "@/components/marketplace-icon";
 import { AdminShell } from "@/components/admin/shell";
 import { Button } from "@/components/ui/button";
+import { AdminAutoRefresh } from "@/components/admin/auto-refresh";
 
 export const metadata: Metadata = { title: "Staff console | NOTBIT", robots: { index: false } };
 export const dynamic = "force-dynamic";
@@ -28,5 +29,5 @@ export default async function AdminLayout({ children }: Readonly<{ children: Rea
     return <AccessNotice message={error.status === 401 ? "Connect and sign in with your staff wallet to review orders, inspect evidence, and manage disputes."
       : error.status === 403 ? "This wallet does not have staff access. Switch to an Admin or Super Admin wallet to continue." : error.message} />;
   }
-  return <AdminShell role={staff.role as "ADMIN" | "SUPER_ADMIN"} wallet={staff.wallet}>{children}</AdminShell>;
+  return <AdminShell role={staff.role as "ADMIN" | "SUPER_ADMIN"} wallet={staff.wallet}><AdminAutoRefresh />{children}</AdminShell>;
 }

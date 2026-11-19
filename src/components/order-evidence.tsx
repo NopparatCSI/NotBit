@@ -1,4 +1,5 @@
 "use client";
+import { uploadStagedImage } from "@/lib/uploads/client";
 
 import Image from "next/image";
 import { writeContract } from "@wagmi/core";
@@ -112,10 +113,10 @@ function EvidenceUpload({ offer, buyer, dispute, onSubmitted, disabled }: {
     setError("");
     try {
       const evidenceHash = await hashEvidenceFiles(files);
-      const body = new FormData();
-      body.set("stage", dispute ? "dispute" : buyer ? "receipt" : "delivery");
-      for (const file of files) body.append("files", file);
-      const data = await responseData<unknown>(await fetch(`/api/v1/orders/${offer.id}/evidence`, { method: "POST", body }), true);
+      const ticketIds: string[] = [];
+      for (const file of files) ticketIds.push(await uploadStagedImage(file, "evidence", offer.id));
+      const body = JSON.stringify({ stage: dispute ? "dispute" : buyer ? "receipt" : "delivery", ticketIds });
+      const data = await responseData<unknown>(await fetch(`/api/v1/orders/${offer.id}/evidence`, { method: "POST", headers: { "Content-Type": "application/json" }, body }), true);
       if (dispute) {
         const parsed = disputeEvidenceUploadSchema.safeParse(data);
         if (!parsed.success || parsed.data.evidence.length !== files.length
@@ -301,9 +302,10 @@ export function OrderEvidence({ offer, buyer }: { offer: Offer; buyer: boolean }
   }
 
   const expired = !!state?.deadline && now >= state.deadline * 1000;
-  const canAct = state?.status === "CONFIRMED" && (buyer ? state.orderStatus === "DELIVERED" : state.orderStatus === "FUNDED") && !expired;
-  const canAddDisputeEvidence = state?.status === "CONFIRMED" && state.orderStatus === "IN_REVIEW";
-  const canOpenDispute = state?.status === "CONFIRMED" && (state.orderStatus === "FUNDED" || state.orderStatus === "DELIVERED");
+  const ready = state?.status === "CONFIRMED" && state.projectionReady === true;
+  const canAct = ready && (buyer ? state.orderStatus === "DELIVERED" : state.orderStatus === "FUNDED") && !expired;
+  const canAddDisputeEvidence = ready && state.orderStatus === "IN_REVIEW";
+  const canOpenDispute = ready && (state.orderStatus === "FUNDED" || state.orderStatus === "DELIVERED");
   const completed = state?.orderStatus === "RELEASED" || state?.orderStatus === "REFUNDED";
   return (
     <section className="min-w-0 space-y-4 rounded-xl border border-border bg-card p-4 sm:p-6" aria-label={`Evidence for ${offer.agreement.title}`}>
@@ -322,7 +324,7 @@ export function OrderEvidence({ offer, buyer }: { offer: Offer; buyer: boolean }
         <p className="text-sm wrap-anywhere">Transaction · {offer.chainId === 11155111 ? <a className="underline" href={`https://sepolia.etherscan.io/tx/${pending.hash}`} target="_blank" rel="noreferrer">{pending.hash}</a> : pending.hash}</p>
       </div>}
       {canAct || canAddDisputeEvidence ? <EvidenceUpload key={state?.orderStatus} offer={offer} buyer={buyer} dispute={canAddDisputeEvidence} disabled={!!pending || (canAct && showDispute)} onSubmitted={submitted} /> :
-        <EvidenceHistory orderId={offer.id} refreshKey={0} />}
+        ready ? <EvidenceHistory orderId={offer.id} refreshKey={0} /> : <p role="status" className="text-sm text-muted-foreground">{state?.status === "CONFIRMED" ? "Deposit confirmed. Syncing your order before evidence is available. You do not need to deposit again." : "Evidence will be available after the deposit is confirmed and your order is ready."}</p>}
       {canOpenDispute && !pending && (showDispute ? (
         <form onSubmit={openDispute} className="space-y-3 rounded-lg border border-border p-4" aria-label="Open dispute">
           <label className="grid gap-2 text-sm font-semibold">Dispute reason

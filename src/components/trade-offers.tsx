@@ -255,7 +255,8 @@ function OfferCard({ offer, room, buyer, context, onFunded, onEvidence }: { offe
         <p role="status">{funding.orderStatus} · At least {requiredConfirmations} confirmations.
           {actionDeadline !== null && ` ${funding.orderStatus === "FUNDED" ? "Delivery" : "Receipt"} deadline ${dateFormat.format(new Date(actionDeadline * 1000))} UTC.`}
         </p>
-        <Button type="button" variant="outline" onClick={onEvidence}>View evidence and next action</Button>
+        {!funding.projectionReady && <p role="status" className="text-sm text-muted-foreground">Deposit confirmed. Syncing your order before the next step. You do not need to deposit again.</p>}
+        <Button type="button" variant="outline" disabled={!funding.projectionReady} onClick={onEvidence}>View evidence and next action</Button>
       </>}
       {pending && <p role="status">{funding.status === "CONFIRMING" ? `Confirming deposit (${Math.min(funding.confirmations, requiredConfirmations)}/${requiredConfirmations})` : "Deposit submitted. Waiting for confirmation…"}</p>}
       {funding?.status === "FAILED" && <p role="alert">The deposit transaction failed. Check the transaction before retrying.</p>}

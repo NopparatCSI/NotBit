@@ -2,8 +2,10 @@ import "server-only";
 import { createWalletClient, http, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { escrowAbi, requiredConfirmations } from "@marketplace/shared";
-import { chainFor, createEscrowClient, getEscrowConfig, type EscrowConfig } from "@/lib/chain/config";
+import { chainFor, createEscrowClient, getCheckedEscrowClient, getEscrowConfig, type EscrowConfig } from "@/lib/chain/config";
 import { getServiceSupabase } from "@/lib/supabase/services";
+import { cleanupStagedImages } from "@/lib/uploads/staging";
+import { reconcileStaffTransactions } from "@/lib/admin/transactions";
 import { findCommonAncestor, nextRange, redactError, safeHead, sameFork, serializeArgs, smallerLogRange, type StoredEvent } from "./plan";
 
 const batchSize = 500n; // Reduced automatically if the RPC plan enforces a smaller range.
@@ -142,7 +144,7 @@ export async function runIndexer(): Promise<IndexerSummary> {
   if (config.chainId !== 31337 && config.startBlock === 0n) {
     throw new Error("Set ESCROW_START_BLOCK to the escrow deploy block before indexing Sepolia.");
   }
-  const client = createEscrowClient(config);
+  const client = await getCheckedEscrowClient(config);
 
   const head = safeHead(await client.getBlockNumber(), requiredConfirmations);
   const summary: IndexerSummary = {
@@ -195,5 +197,9 @@ export async function runIndexer(): Promise<IndexerSummary> {
   }
 
   summary.escalations = await escalateExpired(supabase, client, config);
+  await reconcileStaffTransactions();
+  const messages = await supabase.rpc("reconcile_trade_messages", { p_chain: config.chainId, p_escrow: config.escrowAddress });
+  if (messages.error) throw new Error("Confirmed trade messages could not be reconciled. Will retry.");
+  await cleanupStagedImages().catch(() => console.warn("Staging cleanup deferred until the next indexer run."));
   return summary;
 }

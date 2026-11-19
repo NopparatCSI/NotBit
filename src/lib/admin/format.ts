@@ -41,4 +41,11 @@ export const actionLabels: Record<string, string> = {
   DECISION_SUBMITTED: "Sent decision transaction",
   ESCALATION_SUBMITTED: "Sent escalation transaction",
   FUNDING_PAUSE_SUBMITTED: "Sent funding pause transaction",
+  DECISION_CONFIRMED: "Decision confirmed on-chain",
+  ESCALATION_CONFIRMED: "Escalation confirmed on-chain",
+  FUNDING_PAUSE_CONFIRMED: "Funding change confirmed on-chain",
+  TRANSACTION_FAILED: "Transaction reverted on-chain",
+  TRANSACTION_REORGED: "Transaction requires re-verification after a chain reorganization",
+  CHAT_IMAGE_VIEWED: "Viewed private chat image",
+  CHAT_PAGE_VIEWED: "Read conversation history",
 };

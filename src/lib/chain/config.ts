@@ -1,26 +1,15 @@
 import "server-only";
-import { createPublicClient, http, type Address } from "viem";
+import { createPublicClient, http } from "viem";
 import { hardhat, sepolia } from "viem/chains";
-import { chainIds, walletSchema } from "@marketplace/shared";
+import { chainIds } from "@marketplace/shared";
+import { resolveEscrowSettings, type EscrowSettings } from "./settings";
+import { ApiError } from "@/lib/api/response";
 
-export type EscrowConfig = {
-  chainId: number;
-  escrowAddress: Address;
-  rpcUrl: string;
-  startBlock: bigint;
-};
+export type EscrowConfig = EscrowSettings;
 
 // ESCROW_CHAIN_ID selects Sepolia (default) or the local Hardhat chain for testing.
 export function getEscrowConfig(): EscrowConfig | null {
-  const chainId = Number(process.env.ESCROW_CHAIN_ID || chainIds.sepolia);
-  if (chainId !== chainIds.sepolia && chainId !== chainIds.local) return null;
-  const environment = process.env;
-  const escrow = walletSchema.safeParse(environment.ESCROW_ADDRESS || environment.NEXT_PUBLIC_ESCROW_ADDRESS);
-  const rpcUrl = process.env.ESCROW_RPC_URL
-    || (chainId === chainIds.local ? "http://127.0.0.1:8545" : process.env.SEPOLIA_RPC_URL);
-  if (!escrow.success || !rpcUrl) return null;
-  const startBlock = /^[0-9]+$/.test(process.env.ESCROW_START_BLOCK ?? "") ? BigInt(process.env.ESCROW_START_BLOCK!) : 0n;
-  return { chainId, escrowAddress: escrow.data, rpcUrl, startBlock };
+  return resolveEscrowSettings(process.env);
 }
 
 export function chainFor(chainId: number) {
@@ -29,6 +18,21 @@ export function chainFor(chainId: number) {
 
 export function createEscrowClient(config: EscrowConfig) {
   return createPublicClient({ chain: chainFor(config.chainId), transport: http(config.rpcUrl, { retryCount: 2 }) });
+}
+
+const checks = new Map<string, { until: number; promise: Promise<void> }>();
+export async function getCheckedEscrowClient(config: EscrowConfig) {
+  const client = createEscrowClient(config), key = `${config.chainId}:${config.rpcUrl}`;
+  let check = checks.get(key);
+  if (!check || check.until <= Date.now()) {
+    for (const [oldKey, value] of checks) if (value.until <= Date.now()) checks.delete(oldKey);
+    const promise = client.getChainId().then(actual => {
+      if (actual !== config.chainId) throw new ApiError(503, "UNAVAILABLE", "The configured RPC is connected to a different chain.");
+    }).catch(() => { checks.delete(key); throw new ApiError(503, "UNAVAILABLE", "The escrow RPC chain could not be verified. Check the server configuration."); });
+    check = { until: Date.now() + 30_000, promise }; checks.set(key, check);
+  }
+  await check.promise;
+  return client;
 }
 
 // The stored order must belong to the escrow this server signs and indexes for.

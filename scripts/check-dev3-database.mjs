@@ -2,7 +2,7 @@ import nextEnv from "@next/env";
 import { createClient } from "@supabase/supabase-js";
 import { keccak256 } from "viem";
 
-nextEnv.loadEnvConfig(process.cwd());
+nextEnv.loadEnvConfig(process.cwd(), process.env.NODE_ENV !== "production");
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SECRET_KEY;
 if (!url || !key) {
@@ -26,6 +26,9 @@ const checks = {
   staff_wallets: "wallet,role",
   escrow_payout_balances: "chain_id,escrow_address,wallet,pending_wei",
   escrow_funding_state: "chain_id,escrow_address,funding_paused,block_number",
+  upload_tickets: "id,user_id,purpose,scope_id,object_path,expires_at,consumed_at",
+  staff_transactions: "chain_id,escrow_address,tx_hash,staff_id,action,status,confirmed_block_hash",
+  evidence_upload_reservations: "id,user_id,file_count,created_at",
 };
 let failures = 0;
 await Promise.all(Object.entries(checks).map(async ([table, columns]) => {
@@ -44,6 +47,13 @@ if (bucketError || !bucket || bucket.public || bucket.file_size_limit !== 10 * 1
   failures++;
   console.error("FAIL order-evidence: expected a private bucket with a 10 MB image limit. Check storage migrations.");
 } else console.log("OK private order-evidence bucket (10 MB, JPEG/PNG/WebP)");
+
+const staging = await database.storage.getBucket("upload-staging");
+if (staging.error || !staging.data || staging.data.public || staging.data.file_size_limit !== 10 * 1024 * 1024
+  || !["image/jpeg", "image/png", "image/webp"].every(type => staging.data.allowed_mime_types?.includes(type))) {
+  failures++;
+  console.error("FAIL upload-staging: expected a private 10 MB image bucket. Apply the staged uploads migration.");
+} else console.log("OK private upload-staging bucket (10 MB, JPEG/PNG/WebP)");
 
 if (process.argv.includes("--storage-write")) {
   // Opt-in round trip. Delete only the fresh diagnostic object created by this run.

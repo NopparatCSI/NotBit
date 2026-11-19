@@ -35,6 +35,7 @@ export type OrderFunding = {
   hash: `0x${string}` | null;
   orderStatus: string | null;
   deadline: number | null;
+  projectionReady?: boolean;
 };
 
 export function offerTypedData(offer: Pick<Offer, "signedOffer" | "chainId" | "escrowAddress">) {

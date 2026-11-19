@@ -1,0 +1,10 @@
+.env*
+.git
+.runtime
+.tools
+node_modules
+.next
+contracts/artifacts
+contracts/cache
+test-results
+playwright-report

@@ -9,6 +9,7 @@ import { formatEther } from "viem";
 import { Button } from "@/components/ui/button";
 import { TradeOffers } from "@/components/trade-offers";
 import { OrderEvidence } from "@/components/order-evidence";
+import { uploadStagedImage } from "@/lib/uploads/client";
 import type { Offer } from "@/lib/offers/model";
 import { listingStatusLabel } from "@/lib/listings/model";
 import { getSupabaseConfig } from "@/lib/supabase/config";
@@ -132,11 +133,9 @@ function TradeChat({ room, viewerId, initialHistory, active }: {
       const { id } = retry.current;
       const payload: RequestInit = { method: "POST" };
       if (image) {
-        const form = new FormData();
-        form.set("id", id);
-        form.set("body", body);
-        form.set("image", image);
-        payload.body = form;
+        const imageTicketId = await uploadStagedImage(image, "chat", room.id);
+        payload.headers = { "Content-Type": "application/json" };
+        payload.body = JSON.stringify({ id, body, imageTicketId });
       } else {
         payload.headers = { "Content-Type": "application/json" };
         payload.body = JSON.stringify({ id, body });

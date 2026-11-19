@@ -112,6 +112,10 @@ npm run contracts:deploy:sepolia
 
 ## ตรวจการเชื่อมฐานข้อมูลของ Developer 3
 
+หลังรวมและแก้งานลำดับ 1–6 ดู [ผลดำเนินการ/วิธีเปิด Cron และ direct Storage uploads](docs/priority-1-6.md) ใช้ `npm run env:check` ตรวจ chain, deployment, สิทธิ์ และ signer โดยไม่แสดง secrets
+
+งานลำดับ 7–15 เพิ่มการรอซิงก์ออเดอร์, Admin chat/history recovery, Queued payments ในหน้า Wallet และ atomic evidence quota ดู [ผลดำเนินการและ migrations ที่ต้องใช้](docs/priority-7-15.md)
+
 ตั้ง Supabase URL, publishable key และ `SUPABASE_SECRET_KEY` ให้ตรงกับฐานข้อมูลเดียวกันตาม `.env.example` แล้วรัน:
 
 ```powershell
@@ -131,3 +135,7 @@ npx supabase migration up --local
 ```
 
 หน้า `/admin` ต้องใช้ view `staff_order_overview` จาก `20261117090000_evidence_disputes_indexer.sql`. ถ้าพบ `PGRST205` หรือข้อความว่าไม่พบ view นี้ ให้ตรวจว่าใช้ migration กับฐานข้อมูลที่ตรงกับ `NEXT_PUBLIC_SUPABASE_URL` แล้ว หากใช้ Supabase บนบริการ ให้ตรวจโปรเจกต์ที่ link ไว้และใช้ `npx supabase db push --dry-run` ก่อน `npx supabase db push`.
+
+## Acceptance ลำดับ 16–23
+
+ผลทดสอบ session/ซื้อขาย/ข้อพิพาท/กำหนดเวลา/payout/failures/recovery พร้อมหลักฐานธุรกรรม Sepolia และวิธีรันชุดทดสอบแยกอยู่ใน [docs/priority-16-23.md](docs/priority-16-23.md)

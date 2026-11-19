@@ -1,12 +1,18 @@
 import "server-only";
-import type { ZodType } from "zod";
+import { z, type ZodType } from "zod";
+import { takeStagedImage } from "@/lib/uploads/staging";
 import { listingImageMaxBytes } from "./model";
 import { ListingError, readListingInput } from "./server";
 
-export async function readListingSubmission<T>(request: Request, schema: ZodType<T>) {
+export async function readListingSubmission<T>(request: Request, schema: ZodType<T>, sellerId: string, listingId?: string) {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().startsWith("multipart/form-data;")) {
-    return { input: await readListingInput(request, schema), image: undefined };
+    const raw = await readListingInput(request, z.object({ imageTicketId: z.uuid().optional() }).passthrough());
+    const { imageTicketId, ...fields } = raw;
+    const parsed = schema.safeParse(fields);
+    if (!parsed.success) throw new ListingError(400, "INVALID_INPUT", "Check the listing details.");
+    const image = imageTicketId ? await takeStagedImage(imageTicketId, sellerId, "listing", listingId) : undefined;
+    return { input: parsed.data, image };
   }
   const maxBodyBytes = listingImageMaxBytes + 1024 * 1024;
   if (Number(request.headers.get("content-length")) > maxBodyBytes) {
